@@ -84,6 +84,7 @@ Replace `KEY_NAME` with the variable name corresponding to your provider:
 | Anthropic   | `ANTHROPIC_API_KEY` |
 | Dartmouth   | `DARTMOUTH_API_KEY` |
 | Google      | `GOOGLE_API_KEY`    |
+| Mistral     | `MISTRAL_API_KEY`    |
 | OpenAI      | `OPENAI_API_KEY`    |
 
 

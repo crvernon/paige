@@ -25,6 +25,15 @@ def get_llm(
             temperature=ConfigurableField(id="temperature"),
         )
 
+    elif provider == "mistral":
+        from langchain_mistralai import ChatMistralAI
+
+        return ChatMistralAI().configurable_fields(
+            model=ConfigurableField(id="model"),
+            max_tokens=ConfigurableField(id="max_tokens"),
+            temperature=ConfigurableField(id="temperature"),
+        )
+
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
 

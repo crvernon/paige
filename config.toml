@@ -21,6 +21,12 @@ models = ["gemini-1.5-flash-8b"]
 [llm.google."gemini-1.5-flash-8b"]
 max_allowable_tokens = 1_000_000
 
+[llm.mistral]
+models = ["mistral-small-latest"]
+
+[llm.mistral.mistral-small-latest]
+max_allowable_tokens = 32000
+
 [llm.openai]
 models = ["gpt-4o", "gpt-4", "gpt-3.5-turbo-16k", "gpt-3.5-turbo"]
 
