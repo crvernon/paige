@@ -67,7 +67,7 @@ You can configure a variety of LLMs, both remote and local, to choose from in th
 #### Setting Up API Keys
 If any of the configured models require an API key, you need to set them up as Streamlit secrets.
 
-First, you have the acquire the API key from the provider of your choice (e.g., [OpenAI](https://platform.openai.com/api-keys) or [Anthropic](https://console.anthropic.com/settings/keys)).
+First, you have the acquire the API key from the provider of your choice (e.g., [OpenAI](https://platform.openai.com/api-keys), [Google](https://ai.google.dev/gemini-api/docs/api-key), or [Anthropic](https://console.anthropic.com/settings/keys)).
 
 Then, create a folder named `.streamlit` in the root of this repo. Inside that folder, create a file named `secrets.toml`.
 
@@ -83,6 +83,7 @@ Replace `KEY_NAME` with the variable name corresponding to your provider:
 | --------    | -------             |
 | Anthropic   | `ANTHROPIC_API_KEY` |
 | Dartmouth   | `DARTMOUTH_API_KEY` |
+| Google      | `GOOGLE_API_KEY`    |
 | OpenAI      | `OPENAI_API_KEY`    |
 
 
