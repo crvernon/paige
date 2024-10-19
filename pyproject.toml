@@ -55,6 +55,10 @@ anthropic = [
     "langchain_anthropic>=0.2.3"
 ]
 
+google = [
+    "langchain-google-genai>=2.0.1"
+]
+
 [project.urls]
 Repository = "https://github.com/crvernon/highlight"
 

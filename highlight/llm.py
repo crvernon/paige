@@ -14,6 +14,16 @@ def get_llm(
             max_tokens=ConfigurableField(id="max_tokens"),
             temperature=ConfigurableField(id="temperature"),
         )
+    elif provider == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            model="not-specified", max_tokens=1
+        ).configurable_fields(
+            model=ConfigurableField(id="model"),
+            max_output_tokens=ConfigurableField(id="max_tokens"),
+            temperature=ConfigurableField(id="temperature"),
+        )
 
     elif provider == "openai":
         from langchain_openai import ChatOpenAI
