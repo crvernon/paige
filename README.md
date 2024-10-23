@@ -41,7 +41,7 @@ To install this Python package in a virtual environment, you can use either pip 
 
 #### Using Anaconda
 
-1. Create a virtual environment:
+1. Create a virtual environment (**Note:** Support for models provided by Dartmouth requires Python 3.10 or higher.):
     ```bash
     conda create --name highlight_env python=3.9
     ```
@@ -59,7 +59,6 @@ To install this Python package in a virtual environment, you can use either pip 
     ```bash
     pip install ".[anthropic, dartmouth, ollama]"
     ```
-    **Note:** Support for models provided by Dartmouth requires Python 3.10 or higher.
 
 ### Configuring the LLMs
 You can configure a variety of LLMs, both remote and local, to choose from in the app. To do this, edit the file `config.toml` in the root of this repo.
@@ -67,7 +66,7 @@ You can configure a variety of LLMs, both remote and local, to choose from in th
 #### Setting Up API Keys
 If any of the configured models require an API key, you need to set them up as Streamlit secrets.
 
-First, you have the acquire the API key from the provider of your choice (e.g., [OpenAI](https://platform.openai.com/api-keys), [Google](https://ai.google.dev/gemini-api/docs/api-key), or [Anthropic](https://console.anthropic.com/settings/keys)).
+First, you have to acquire the API key from the provider of your choice (e.g., [OpenAI](https://platform.openai.com/api-keys), [Google](https://ai.google.dev/gemini-api/docs/api-key), [Dartmouth](https://developer.dartmouth.edu/keys), or [Anthropic](https://console.anthropic.com/settings/keys)).
 
 Then, create a folder named `.streamlit` in the root of this repo. Inside that folder, create a file named `secrets.toml`.
 
