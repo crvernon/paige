@@ -57,7 +57,7 @@ To install this Python package in a virtual environment, you can use either pip 
     ```
     By default, only OpenAI's models are supported. You can add support for other providers by installing one ore more of the package's optional dependencies:
     ```bash
-    pip install ".[anthropic, dartmouth, ollama]"
+    pip install ".[anthropic, dartmouth, google, mistral, ollama]"
     ```
 
 ### Configuring the LLMs
