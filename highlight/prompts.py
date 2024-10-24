@@ -5,10 +5,9 @@ SYSTEM_SCOPE = """You are a technical science editor.  You are constructing high
 
 prompt_queue = {
     "system": """You are a technical science editor.  You are constructing high impact highlight content from recent publications.""",
-
     "title": """
-    Generate a title for the text delimited by triple backticks. 
-    
+    Generate a title for the text delimited by triple backticks.
+
     The title should meet the following criteria:
     - No colons are allowed in the output.
     - Should pique the interest of the reader while still being somewhat descriptive.
@@ -18,7 +17,7 @@ prompt_queue = {
     - Should have a maximum length of 10 words.
     - Return only the title.
     - Do not use words like "revolutionizing" or "unraveling"
-    
+
     The following is an example to use for formatting only.  Do not use it in the response.  \
     The example is delimited by three pound signs.
     ###
@@ -26,12 +25,12 @@ prompt_queue = {
     ###
 
     The following is the input text delimited by triple backticks.  Do not use colons in the response.
+    Do not use markdown.
     ```{0}```
     """,
-
     "subtitle": """
     Generate a subtitle for the text delimited by triple backticks.
-    
+
     The subtitle should meet the following criteria:
     - Strictly do not allow colons in the response text.
     - Be an extension of and related to, but not directly quote, this title delimited by single backticks `{1}`
@@ -40,7 +39,7 @@ prompt_queue = {
     - Return only the subtitle.
     - Only capitalize the first letter of the starting word in the sentence unless the word is a proper noun.
     - Add a period at the end of the response.
-    
+
     The following is an example to use for formatting only.  Do not use it in the response.  \
     The example is delimited by three pound signs.
     ###
@@ -48,12 +47,12 @@ prompt_queue = {
     ###
 
     The following is the input text delimited by triple backticks.  Do not use colons in the response.
+    Do not use markdown.
     ```{0}```
     """,
-
     "science": """
     Describe the scientific results for a non-expert, non-scientist audience for the text delimited by triple backticks.
-    
+
     The description should meet the following criteria:
     - Answer what the big challenge in this field of science is that the research addresses.
     - State what the key finding is.
@@ -61,78 +60,77 @@ prompt_queue = {
     - Be understandable to a high school senior or college freshman.
     - Use short sentences and succinct words.
     - Avoid technical terms if possible.  If technical terms are necessary, define them.
-    - Provide the necessary context so someone can have a very basic understanding of what you did. 
+    - Provide the necessary context so someone can have a very basic understanding of what you did.
     - Start with topics that the reader already may know and move on to more complex ideas.
     - Use present tense.
     - In general, the description should speak about the research or researchers in first person.
-    - Use a minimum of 75 words and a maximum of 100 words. 
+    - Use a minimum of 75 words and a maximum of 100 words.
     - Produce only one paragraph.
     - Return only the description.
-    
+    - Do not use markdown.
+    - Do not use triple backticks to delimit your response.
+
     Finally, do not exceed 100 words in the response.
-    
+
     ```{0}```
     """,
-
     "impact": """
     Describe the impact of the research to a non-expert, non-scientist audience for the text delimited by triple backticks.
-    
+
     The description should meet the following criteria:
     - Answer why the findings presented are important, i.e., what problem the research is trying to solve.
     - Answer if the finding is the first of its kind.
     - Answer what was innovative or distinct about the research.
     - Answer what the research enables other scientists in your field to do next.
-    - Include other scientific fields potentially impacted. 
-    - Be understandable to a high school senior or college freshman. 
+    - Include other scientific fields potentially impacted.
+    - Be understandable to a high school senior or college freshman.
     - Use short sentences and succinct words.
     - Avoid technical terms if possible.  If technical terms are necessary, define them.
     - Use present tense.
     - In general, the description should speak about the research or researchers in first person.
-    - Use a minimum of 75 words and a maximum of 100 words. 
-    
+    - Use a minimum of 75 words and a maximum of 100 words.
+
+    Do not use markdown.
     Finally, do not exceed 100 words in the response.
 
 
     ```{0}```
     """,
-
     "summary": """
     Generate a summary of the current research represented in the text delimited by triple backticks.
-    
+
     The summary should meet the following criteria:
     - Should relay key findings and value.
-    - The summary should be still accessible to the non-specialist but may be more technical if necessary. 
-    - Do not mention the names of institutions. 
-    - If there is a United States Department of Energy Office of Science user facility involved, such as NERSC, you can mention the user facility. 
+    - The summary should be still accessible to the non-specialist but may be more technical if necessary.
+    - Do not mention the names of institutions.
+    - If there is a United States Department of Energy Office of Science user facility involved, such as NERSC, you can mention the user facility.
     - Should be 1 or 2 paragraphs detailing the research.
     - Use present tense.
     - In general, the description should speak about the research or researchers in first person.
     - Use no more than 200 words.
     - Return only the summary.
-    
+
+    Do not use markdown.
     Finally, do not exceed 200 words in the response.
 
-    
+
     ```{0}```
     """,
-
     "figure": """
     Generate a list of 5 search strings for use in the website that hosts free stock photos  \
     (e.g., https://www.pexels.com/) that would be representative of an aspect of the following research statement \
-    delimited by triple backticks.  
+    delimited by triple backticks.
 
     ```{0}```
     """,
-
     "caption": """
     Generate a caption for a photograph describing an aspect of the research for the text delimited by triple backticks.
-    
+
     The caption should meet the following criteria:
     - The caption should be greater than 200 characters and less than 255 character long.
 
     ```{0}```
     """,
-
     "objective": """
     Generate one sentence stating the core purpose of the study.
 
@@ -155,28 +153,26 @@ prompt_queue = {
     Here is the input text delimited by triple backticks:
     ```{2}```
     """,
-
-    "approach": """Clearly and concisely state in 2-3 short points how this work accomplished the stated objective from a methodolgocial perspecive. 
+    "approach": """Clearly and concisely state in 2-3 short points how this work accomplished the stated objective from a methodolgocial perspecive.
     - Do not restate the objective or include results.
-    - Only include methodology including but not limited to: statistical, technological, and theory based approaches. 
-    - Here is the objective statement: {1} 
+    - Only include methodology including but not limited to: statistical, technological, and theory based approaches.
+    - Here is the objective statement: {1}
     - Use a different action verb to start sentences than what is used to begin the objective statement.
-    - Use active verbs for the start of each point.  
+    - Use active verbs for the start of each point.
     - Use present tense.
     - Format the results as a hyphen-separated list.
     - The response must be in a hyphen-separated list.
-  
+
     # Example response for the purposes of formatting
     RESPONSE:
     - Evaluate contemporary and hypothesized Western U.S. infrastructures with variable renewable generation shares for sensitivity to drought and Southern California heat wave scenarios on generation and load.
     - Use a stochastic temperature simulation combined with spatially resolved historical drought as a toolset to incorporate other grid stressors in high-resolution power system models, leading to improved sensitivity analyses not limited by the current ability of climate models to capture extreme conditions.
-    
+
     # Input to process
     TEXT: {0}
     RESPONSE:
     """,
-
-    "ppt_impact": """Clearly and concisely state in 3 bullet points the key results and outcomes from this research. 
+    "ppt_impact": """Clearly and concisely state in 3 bullet points the key results and outcomes from this research.
     - State what the results indicate.
     - Include results that may be considered profound or surprising.
     - Each point should be 1 concise sentence.
@@ -195,20 +191,17 @@ prompt_queue = {
     TEXT: {0}
     RESPONSE:
     """,
-
     "reduce_wordcount": """Reduce the current text to be greater than {0} words and less than or equal to {1} words.  \
     The following is the text delimited by triple backquotes:
-     
+
      ```{2}```
     """,
-
     "figure_caption": """Summarize the key findings of the paper as a figure caption.
     - Limit the response to 25 words.
-    
+
     TEXT: {0}
     RESPONSE:
     """,
-
     "figure_choice": """What figure from the results of the paper best represents the high impact content that can be easily understood by a non-technical, non-scientifc audience.
     Limit the response to:
     1. The figure name as it is written in the text,
@@ -218,18 +211,16 @@ prompt_queue = {
     TEXT: {0}
     RESPONSE:
     """,
+    "citation": """Generate the citation for this publication in Chicago style.
+    Do not use the example directly.
 
-    "citation": """Generate the citation for this publication in Chicago style. 
-    Do not use the example directly.  
-    
     # Example:
     Hadjimichael, A., J. Yoon, P. Reed, N. Voisin, W. Xu. 2023. “Exploring the Consistency of Water Scarcity Inferences between Large-Scale Hydrologic and Node-Based Water System Model Representations of the Upper Colorado River Basin,” J. Water Resour. Plann. Manage., 149(2): 04022081. DOI: 10.1061/JWRMD5.WRENG-5522
 
     TEXT: {0}
     RESPONSE:
     """,
-
-    "funding": """Extract the funding statement from the content provided. 
+    "funding": """Extract the funding statement from the content provided.
     Only provide the funding statment.  Do not provide header content like **Funding Statement:**.
 
     TEXT: {0}

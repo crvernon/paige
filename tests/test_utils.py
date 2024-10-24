@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
 from io import BytesIO
+from pathlib import Path
 
 import tiktoken
 from pypdf import PdfWriter, PdfReader
@@ -26,6 +27,26 @@ class TestGetTokenCount(unittest.TestCase):
         self.assertEqual(hlt.get_token_count(text), expected_token_count)
 
 
+class TestReadConfig(unittest.TestCase):
+    def test_read_config(self):
+        config = hlt.read_config(Path(__file__).parent.resolve() / "test-config.toml")
+        self.assertDictEqual(
+            {
+                "llm": {
+                    "openai": {
+                        "models": [
+                            "gpt-4o",
+                            "gpt-4",
+                            "gpt-3.5-turbo-16k",
+                            "gpt-3.5-turbo",
+                        ]
+                    }
+                }
+            },
+            config,
+        )
+
+
 class TestReadPdf(unittest.TestCase):
     def test_read_pdf_without_reference_indicator(self):
         # Create a sample PDF file using pypdf
@@ -44,7 +65,9 @@ class TestReadPdf(unittest.TestCase):
         buffer.seek(0)
 
         # Mock the PdfReader's extract_text method to return "Hello World"
-        with patch.object(PdfReader, 'pages', new_callable=unittest.mock.PropertyMock) as mock_pages:
+        with patch.object(
+            PdfReader, "pages", new_callable=unittest.mock.PropertyMock
+        ) as mock_pages:
             mock_page = unittest.mock.Mock()
             mock_page.extract_text.return_value = "Hello World"
             mock_pages.return_value = [mock_page]
@@ -64,7 +87,7 @@ class TestReadText(unittest.TestCase):
     def test_read_text(self):
         # Simulate a text file using BytesIO
         sample_text = "Hello World!\nThis is a test file."
-        text_file = BytesIO(sample_text.encode('utf-8'))
+        text_file = BytesIO(sample_text.encode("utf-8"))
 
         result = hlt.read_text(text_file)
 
@@ -72,4 +95,8 @@ class TestReadText(unittest.TestCase):
         self.assertEqual(result["content"], sample_text)
         self.assertEqual(result["n_pages"], 1)
         self.assertEqual(result["n_characters"], len(sample_text))
-        self.assertEqual(result["n_words"], 7)  
+        self.assertEqual(result["n_words"], 7)
+
+
+if __name__ == "__main__":
+    unittest.main()

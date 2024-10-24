@@ -5,6 +5,14 @@ import streamlit as st
 
 import highlight.prompts as prompts
 
+from pathlib import Path
+from typing import Union
+
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
 
 def get_token_count(text, model="gpt-4o"):
     """
@@ -23,6 +31,21 @@ def get_token_count(text, model="gpt-4o"):
     n_text_tokens = len(encoded_text)
 
     return n_text_tokens
+
+
+def read_config(config_file: Union[str, Path]) -> dict:
+    """
+    Read the configuration file and return its contents as a dictionary.
+
+    Args:
+        config_file (str | Path): The path to the configuration file.
+
+    Returns:
+        dict: The contents of the configuration file as a dictionary.
+    """
+    with open(config_file, "rb") as cf:
+        config = tomllib.load(cf)
+    return config
 
 
 def read_pdf(file_object: object, reference_indicator: str = "References\n") -> dict:
@@ -68,7 +91,7 @@ def read_pdf(file_object: object, reference_indicator: str = "References\n") -> 
         "n_pages": n_pages,
         "n_characters": len(content),
         "n_words": len(content.split(" ")),
-        "n_tokens": get_token_count(content)
+        "n_tokens": get_token_count(content),
     }
 
 
@@ -87,23 +110,18 @@ def read_text(file_object: object) -> dict:
             - n_words (int): The number of words in the extracted content.
             - n_tokens (int): The number of tokens in the extracted content.
     """
-    content = bytes.decode(file_object.read(), 'utf-8')
+    content = bytes.decode(file_object.read(), "utf-8")
 
     return {
         "content": content,
         "n_pages": 1,
         "n_characters": len(content),
         "n_words": len(content.replace("\n", " ").split()),
-        "n_tokens": get_token_count(content)
+        "n_tokens": get_token_count(content),
     }
 
 
-def content_reduction(
-    client,
-    document_list,
-    system_scope,
-    model
-):
+def content_reduction(client, document_list, system_scope, model):
     """
     Reduce the input text by removing irrelevant content.
 
@@ -125,18 +143,15 @@ def content_reduction(
         page_tokens = get_token_count(page_content)
 
         messages = [
-            {"role": "system", "content": system_scope},
-            {"role": "user", "content": prompt.format(text=page_content)}
+            ("system", system_scope),
+            ("user", prompt.format(text=page_content)),
         ]
 
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=page_tokens,
-            temperature=0.0,
-            messages=messages
-        )
+        response = client.with_config(
+            configurable={"model": model, "max_tokens": page_tokens, "temperature": 0.0}
+        ).invoke(messages)
 
-        content += response.choices[0].message.content
+        content += response.content
 
     return content
 
@@ -148,7 +163,7 @@ def generate_prompt_content(
     max_tokens=50,
     temperature=0.0,
     max_allowable_tokens=8192,
-    model="gpt-4o"
+    model="gpt-4o",
 ):
     """
     Generate content using the OpenAI API based on the provided prompt and parameters.
@@ -172,24 +187,27 @@ def generate_prompt_content(
     n_prompt_tokens = get_token_count(prompt) + max_tokens
 
     if n_prompt_tokens > max_allowable_tokens:
-        raise RuntimeError((
-            f"ERROR:  input text tokens needs to be reduced due to exceeding the maximum ",
-            " allowable tokens per prompt by {n_prompt_tokens - max_allowable_tokens} tokens."
-        ))
+        raise RuntimeError(
+            (
+                f"ERROR:  input text tokens needs to be reduced due to exceeding the maximum ",
+                " allowable tokens per prompt by {n_prompt_tokens - max_allowable_tokens} tokens.",
+            )
+        )
 
     messages = [
-        {"role": "system", "content": system_scope},
-        {"role": "user", "content": prompt}
+        ("system", system_scope),
+        ("user", prompt),
     ]
 
-    response = client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=messages
-    )
+    response = client.with_config(
+        configurable={
+            "model": model,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+    ).invoke(messages)
 
-    content = response.choices[0].message.content
+    content = response.content
 
     return content
 
@@ -207,7 +225,7 @@ def generate_content(
     max_word_count=100,
     min_word_count=75,
     max_allowable_tokens: int = 150000,
-    model="gpt-4o"
+    model="gpt-4o",
 ):
     """
     Generate content using the OpenAI API based on the provided parameters and display it in a Streamlit container.
@@ -238,7 +256,7 @@ def generate_content(
         max_tokens=max_tokens,
         max_allowable_tokens=max_allowable_tokens,
         additional_content=additional_content,
-        model=model
+        model=model,
     )
 
     container.markdown(result_title)
@@ -248,27 +266,30 @@ def generate_content(
     if word_count > max_word_count:
 
         # construct word count reduction prompt
-        reduction_prompt = prompts.prompt_queue["reduce_wordcount"].format(min_word_count, max_word_count, response)
-
-        messages = [
-            {"role": "system", "content": prompts.prompt_queue["system"]},
-            {"role": "user", "content": reduction_prompt}
-        ]
-
-        reduced_response = client.chat.completions.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages
+        reduction_prompt = prompts.prompt_queue["reduce_wordcount"].format(
+            min_word_count, max_word_count, response
         )
 
-        response = reduced_response.choices[0].message.content
+        messages = [
+            ("system", prompts.prompt_queue["system"]),
+            ("user", reduction_prompt),
+        ]
+
+        reduced_response = client.with_config(
+            configurable={
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+        ).invoke(messages)
+
+        response = reduced_response.content
 
     container.text_area(
         label=result_title,
         value=response,
         label_visibility="collapsed",
-        height=box_height
+        height=box_height,
     )
 
     st.write(f"Word count:  {len(response.split())}")
@@ -284,7 +305,7 @@ def generate_prompt(
     max_allowable_tokens: int = 150000,
     temperature: float = 0.0,
     additional_content: str = None,
-    model: str = "gpt-4"
+    model: str = "gpt-4",
 ) -> str:
     """
     Generate a prompt using the provided parameters and the prompt queue.
@@ -305,39 +326,31 @@ def generate_prompt(
 
     if prompt_name in ("objective",):
         prompt = prompts.prompt_queue[prompt_name].format(
-            prompts.EXAMPLE_TEXT_ONE, 
-            prompts.EXAMPLE_TEXT_TWO, 
-            content
+            prompts.EXAMPLE_TEXT_ONE, prompts.EXAMPLE_TEXT_TWO, content
         )
 
     elif prompt_name in ("approach",):
         if additional_content is None:
             additional_content = content
-        prompt = prompts.prompt_queue[prompt_name].format(
-            content, 
-            additional_content
-        )
+        prompt = prompts.prompt_queue[prompt_name].format(content, additional_content)
 
     elif prompt_name in ("subtitle",):
         if additional_content is None:
             additional_content = content
-        prompt = prompts.prompt_queue[prompt_name].format(
-            content, 
-            additional_content
-        )
+        prompt = prompts.prompt_queue[prompt_name].format(content, additional_content)
 
     elif prompt_name in (
-        "figure", 
-        "caption", 
-        "impact", 
-        "summary", 
-        "title", 
-        "science", 
+        "figure",
+        "caption",
+        "impact",
+        "summary",
+        "title",
+        "science",
         "ppt_impact",
-        "figure_caption", 
-        "figure_choice", 
+        "figure_caption",
+        "figure_choice",
         "citation",
-        "funding"
+        "funding",
     ):
         prompt = prompts.prompt_queue[prompt_name].format(content)
 
@@ -348,5 +361,5 @@ def generate_prompt(
         max_tokens=max_tokens,
         temperature=temperature,
         max_allowable_tokens=max_allowable_tokens,
-        model=model
+        model=model,
     )

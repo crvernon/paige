@@ -6,21 +6,14 @@ from docxtpl import DocxTemplate
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
-from openai import OpenAI
+
 import streamlit as st
 
 import highlight as hlt
 
+if "config" not in st.session_state:
+    st.session_state["config"] = hlt.read_config("config.toml")
 
-if "client" not in st.session_state:
-    key = os.getenv("OPENAI_API_KEY", default=None)
-    if key is None:
-        raise KeyError((
-            "No key found for 'OPENAI_API_KEY' system variable. " + 
-            "Obtain your OpenAI API key from the OpenAI website: https://platform.openai.com/api-keys"
-        ))
-    else:
-        st.session_state.client = OpenAI(api_key=key)
 
 if "reduce_document" not in st.session_state:
     st.session_state.reduce_document = False
@@ -125,28 +118,25 @@ st.write(
 # Render streamlit page
 st.title("Research Highlight Generator")
 
-st.markdown((
-    "This app uses a Large Language Model (LLM) of your choosing to generate " + 
-    " formatted research highlight content from an input file."
-))
-
-st.session_state.model = st.selectbox(
-    label="Select your model:",
-    options=("gpt-4o", "gpt-4", "gpt-3.5-turbo-16k", "gpt-3.5-turbo")
+st.markdown(
+    (
+        "This app uses a Large Language Model (LLM) of your choosing to generate "
+        + " formatted research highlight content from an input file."
+    )
 )
 
-if st.session_state.model == "gpt-4-32k":
-    st.session_state.max_allowable_tokens = 32768
-elif st.session_state.model == "gpt-4":
-    st.session_state.max_allowable_tokens = 8192
-elif st.session_state.model == "gpt-3.5-turbo-16k":
-    st.session_state.max_allowable_tokens = 16384
-elif st.session_state.model == "gpt-3.5-turbo":
-    st.session_state.max_allowable_tokens = 4096
-elif st.session_state.model == "gpt-4o":
-    st.session_state.max_allowable_tokens = 150000
+llm_id = st.selectbox(
+    label="Select your model:", options=hlt.llm.list_llms(st.session_state["config"])
+)
+st.session_state.provider, st.session_state.model = llm_id.split(": ")
+st.session_state.max_allowable_tokens = st.session_state.config["llm"][
+    st.session_state.provider
+][st.session_state.model]["max_allowable_tokens"]
 
-# set api key
+st.session_state.client = hlt.llm.get_llm(
+    st.session_state.provider,
+    max_context_length=st.session_state.max_allowable_tokens,
+)
 
 st.markdown("### Upload file to process:")
 uploaded_file = st.file_uploader(
@@ -165,31 +155,33 @@ if uploaded_file is not None:
 
     st.session_state.output_file = uploaded_file.name
 
-    st.code(f"""File specs:\n
+    st.code(
+        f"""File specs:\n
     - Number of pages:  {content_dict['n_pages']}
     - Number of characters:  {content_dict['n_characters']}
     - Number of words: {content_dict['n_words']}
     - Number of tokens: {content_dict['n_tokens']}
-    """)
+    """
+    )
 
-    if content_dict['n_tokens'] > st.session_state.max_allowable_tokens:
+    if content_dict["n_tokens"] > st.session_state.max_allowable_tokens:
         msg = f"""
     The number of tokens in your document exceeds the maximum allowable tokens.
     This will cause your queries to fail.
     The queries account for the number of tokens in a prompt + the number of tokens in your document.
-    
+
     Maximum allowable token count: {st.session_state.max_allowable_tokens}
-    
+
     Your documents token count: {content_dict['n_tokens']}
-    
+
     Token deficit: {content_dict['n_tokens'] - st.session_state.max_allowable_tokens}
     """
         st.error(msg, icon="🚨")
 
         st.session_state.reduce_document = st.radio(
-            """Would you like me to attempt to reduce the size of 
-        your document by keeping only relevant information? 
-        If so, I will give you a file to download with the content 
+            """Would you like me to attempt to reduce the size of
+        your document by keeping only relevant information?
+        If so, I will give you a file to download with the content
         so you only have to do this once.
         If you choose to go through with this, it may take a while
         to process, usually on the order of 15 minutes for a 20K token
@@ -197,7 +189,7 @@ if uploaded_file is not None:
         Alternatively, you can copy and paste the contents that you
         know are of interest into a text file and upload that
         instead.
-    
+
         """,
             ("Yes", "No"),
         )
@@ -210,28 +202,26 @@ if uploaded_file is not None:
     title_container.markdown("##### Generate title from text content")
 
     # title criteria
-    title_container.markdown("""
+    title_container.markdown(
+        """
     The title should meet the following criteria:
     - No colons are allowed in the output.
     - Should pique the interest of the reader while still being somewhat descriptive.
     - Be understandable to a general audience.
     - Should be only once sentence.
     - Should have a maximum length of 10 words.
-    """)
+    """
+    )
 
     title_container.markdown("Set desired temperature:")
 
     # title slider
     title_temperature = title_container.slider(
-        "Title Temperature",
-        0.0,
-        1.0,
-        0.2,
-        label_visibility="collapsed"
+        "Title Temperature", 0.0, 1.0, 0.2, label_visibility="collapsed"
     )
 
     # build container content
-    if title_container.button('Generate Title'):
+    if title_container.button("Generate Title"):
 
         st.session_state.title_response = hlt.generate_content(
             client=st.session_state.client,
@@ -243,7 +233,7 @@ if uploaded_file is not None:
             temperature=title_temperature,
             box_height=50,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -253,7 +243,7 @@ if uploaded_file is not None:
                 label="Title Result:",
                 value=st.session_state.title_response,
                 label_visibility="collapsed",
-                height=50
+                height=50,
             )
 
     # subtitle section
@@ -261,29 +251,29 @@ if uploaded_file is not None:
     subtitle_container.markdown("##### Generate subtitle from text content")
 
     # subtitle criteria
-    subtitle_container.markdown("""
+    subtitle_container.markdown(
+        """
     The subtitle should meet the following criteria:
     - Be an extension of and related to, but not directly quote, the title.
     - Provide information that will make the audience want to find out more about the research.
     - Do not use more than 155 characters including spaces.
-    """)
+    """
+    )
 
     subtitle_container.markdown("Set desired temperature:")
 
     # subtitle slider
     subtitle_temperature = subtitle_container.slider(
-        "Subtitle Temperature",
-        0.0,
-        1.0,
-        0.5,
-        label_visibility="collapsed"
+        "Subtitle Temperature", 0.0, 1.0, 0.5, label_visibility="collapsed"
     )
 
     # build container content
-    if subtitle_container.button('Generate Subtitle'):
+    if subtitle_container.button("Generate Subtitle"):
 
         if st.session_state.title_response is None:
-            st.write("Please generate a Title first.  Subtitle generation considers the title response.")
+            st.write(
+                "Please generate a Title first.  Subtitle generation considers the title response."
+            )
         else:
 
             st.session_state.subtitle_response = hlt.generate_content(
@@ -299,7 +289,7 @@ if uploaded_file is not None:
                 max_word_count=100,
                 min_word_count=75,
                 max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
+                model=st.session_state.model,
             )
 
     else:
@@ -309,7 +299,7 @@ if uploaded_file is not None:
                 label="Subtitle Result:",
                 value=st.session_state.subtitle_response,
                 label_visibility="collapsed",
-                height=50
+                height=50,
             )
 
     # science section
@@ -317,9 +307,10 @@ if uploaded_file is not None:
     science_container.markdown("##### Generate science summary from text content")
 
     # science criteria
-    science_container.markdown("""
+    science_container.markdown(
+        """
     **GOAL**:  Describe the scientific results for a non-expert, non-scientist audience.
-    
+
     The description should meet the following criteria:
     - Answer what the big challenge in this field of science is that the research addresses.
     - State what the key finding is.
@@ -327,26 +318,23 @@ if uploaded_file is not None:
     - Be understandable to a high school senior or college freshman.
     - Use short sentences and succinct words.
     - Avoid technical terms if possible.  If technical terms are necessary, define them.
-    - Provide the necessary context so someone can have a very basic understanding of what you did. 
+    - Provide the necessary context so someone can have a very basic understanding of what you did.
     - Start with topics that the reader already may know and move on to more complex ideas.
     - Use present tense.
     - In general, the description should speak about the research or researchers in first person.
-    - Use a minimum of 75 words and a maximum of 100 words. 
-    """)
+    - Use a minimum of 75 words and a maximum of 100 words.
+    """
+    )
 
     science_container.markdown("Set desired temperature:")
 
     # slider
     science_temperature = science_container.slider(
-        "Science Summary Temperature",
-        0.0,
-        1.0,
-        0.3,
-        label_visibility="collapsed"
+        "Science Summary Temperature", 0.0, 1.0, 0.3, label_visibility="collapsed"
     )
 
     # build container content
-    if science_container.button('Generate Science Summary'):
+    if science_container.button("Generate Science Summary"):
         st.session_state.science_response = hlt.generate_content(
             client=st.session_state.client,
             container=science_container,
@@ -359,7 +347,7 @@ if uploaded_file is not None:
             max_word_count=100,
             min_word_count=75,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -369,44 +357,41 @@ if uploaded_file is not None:
                 label="Science Summary Result:",
                 value=st.session_state.science_response,
                 label_visibility="collapsed",
-                height=250
+                height=250,
             )
 
     # impact section
     impact_container = st.container()
     impact_container.markdown("##### Generate impact summary from text content")
 
-    impact_container.markdown("""
+    impact_container.markdown(
+        """
     **GOAL**: Describe the impact of the research to a non-expert, non-scientist audience.
-    
+
     The description should meet the following criteria:
     - Answer why the findings presented are important, i.e., what problem the research is trying to solve.
     - Answer if the finding is the first of its kind.
     - Answer what was innovative or distinct about the research.
     - Answer what the research enables other scientists in your field to do next.
-    - Include other scientific fields potentially impacted. 
-    - Be understandable to a high school senior or college freshman. 
+    - Include other scientific fields potentially impacted.
+    - Be understandable to a high school senior or college freshman.
     - Use short sentences and succinct words.
     - Avoid technical terms if possible.  If technical terms are necessary, define them.
     - Use present tense.
     - In general, the description should speak about the research or researchers in first person.
-    - Use a minimum of 75 words and a maximum of 100 words. 
-    """)
-
+    - Use a minimum of 75 words and a maximum of 100 words.
+    """
+    )
 
     impact_container.markdown("Set desired temperature:")
 
     # slider
     impact_temperature = impact_container.slider(
-        "Impact Summary Temperature",
-        0.0,
-        1.0,
-        0.0,
-        label_visibility="collapsed"
+        "Impact Summary Temperature", 0.0, 1.0, 0.0, label_visibility="collapsed"
     )
 
     # build container content
-    if impact_container.button('Generate Impact Summary'):
+    if impact_container.button("Generate Impact Summary"):
         st.session_state.impact_response = hlt.generate_content(
             client=st.session_state.client,
             container=impact_container,
@@ -419,7 +404,7 @@ if uploaded_file is not None:
             max_word_count=100,
             min_word_count=75,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -429,40 +414,38 @@ if uploaded_file is not None:
                 label="Impact Summary Result:",
                 value=st.session_state.impact_response,
                 label_visibility="collapsed",
-                height=250
+                height=250,
             )
 
     # general summary section
     summary_container = st.container()
     summary_container.markdown("##### Generate general summary from text content")
 
-    summary_container.markdown("""
+    summary_container.markdown(
+        """
     **GOAL**: Generate a general summary of the current research.
-    
+
     The summary should meet the following criteria:
     - Should relay key findings and value.
-    - The summary should be still accessible to the non-specialist but may be more technical if necessary. 
-    - Do not mention the names of institutions. 
-    - If there is a United States Department of Energy Office of Science user facility involved, such as NERSC, you can mention the user facility. 
+    - The summary should be still accessible to the non-specialist but may be more technical if necessary.
+    - Do not mention the names of institutions.
+    - If there is a United States Department of Energy Office of Science user facility involved, such as NERSC, you can mention the user facility.
     - Should be 1 or 2 paragraphs detailing the research.
     - Use present tense.
     - In general, the description should speak about the research or researchers in first person.
     - Use no more than 200 words.
-    """)
+    """
+    )
 
     summary_container.markdown("Set desired temperature:")
 
     # slider
     summary_temperature = summary_container.slider(
-        "General Summary Temperature",
-        0.0,
-        1.0,
-        0.3,
-        label_visibility="collapsed"
+        "General Summary Temperature", 0.0, 1.0, 0.3, label_visibility="collapsed"
     )
 
     # build container content
-    if summary_container.button('Generate General Summary'):
+    if summary_container.button("Generate General Summary"):
         st.session_state.summary_response = hlt.generate_content(
             client=st.session_state.client,
             container=summary_container,
@@ -475,7 +458,7 @@ if uploaded_file is not None:
             max_word_count=200,
             min_word_count=100,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -485,12 +468,14 @@ if uploaded_file is not None:
                 label="General Summary Result:",
                 value=st.session_state.summary_response,
                 label_visibility="collapsed",
-                height=400
+                height=400,
             )
 
     # figure recommendations section
     figure_container = st.container()
-    figure_container.markdown("##### Generate figure search string recommendations from the general summary")
+    figure_container.markdown(
+        "##### Generate figure search string recommendations from the general summary"
+    )
     figure_container.markdown("Set desired temperature:")
 
     # slider
@@ -499,11 +484,11 @@ if uploaded_file is not None:
         0.0,
         1.0,
         0.9,
-        label_visibility="collapsed"
+        label_visibility="collapsed",
     )
 
     # build container content
-    if figure_container.button('Generate Figure Recommendations'):
+    if figure_container.button("Generate Figure Recommendations"):
 
         if st.session_state.summary_response is None:
             st.write("Please generate a general summary first.")
@@ -518,7 +503,7 @@ if uploaded_file is not None:
                 temperature=figure_temperature,
                 box_height=200,
                 max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
+                model=st.session_state.model,
             )
 
     else:
@@ -529,9 +514,8 @@ if uploaded_file is not None:
                 label="Figure Recommendations Result:",
                 value=st.session_state.figure_response,
                 label_visibility="collapsed",
-                height=200
+                height=200,
             )
-
 
     figure_summary_container = st.container()
     figure_summary_container.markdown(
@@ -541,15 +525,11 @@ if uploaded_file is not None:
     # slider
     figure_summary_container.markdown("Set desired temperature:")
     figure_summary_temperature = figure_summary_container.slider(
-        "Figure Caption Temperature",
-        0.0,
-        1.0,
-        0.1,
-        label_visibility="collapsed"
+        "Figure Caption Temperature", 0.0, 1.0, 0.1, label_visibility="collapsed"
     )
 
     # build container content
-    if figure_summary_container.button('Generate Figure Caption'):
+    if figure_summary_container.button("Generate Figure Caption"):
 
         if st.session_state.summary_response is None:
             st.write("Please generate a general summary first.")
@@ -564,7 +544,7 @@ if uploaded_file is not None:
                 temperature=figure_temperature,
                 box_height=200,
                 max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
+                model=st.session_state.model,
             ).replace('"', "")
 
     else:
@@ -574,14 +554,14 @@ if uploaded_file is not None:
                 label="Figure Caption Result:",
                 value=st.session_state.figure_caption,
                 label_visibility="collapsed",
-                height=200
+                height=200,
             )
 
     # citation recommendations section
     citation_container = st.container()
     citation_container.markdown("##### Citation for the paper in Chicago style")
-    
-    if citation_container.button('Generate Citation'):
+
+    if citation_container.button("Generate Citation"):
         st.session_state.citation = hlt.generate_content(
             client=st.session_state.client,
             container=citation_container,
@@ -592,7 +572,7 @@ if uploaded_file is not None:
             temperature=0.0,
             box_height=200,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         ).replace('"', "")
 
     else:
@@ -601,14 +581,14 @@ if uploaded_file is not None:
                 label="Citation",
                 value=st.session_state.citation,
                 label_visibility="collapsed",
-                height=200
+                height=200,
             )
 
     # funding recommendations section
     funding_container = st.container()
     funding_container.markdown("##### Funding statement from the paper")
-    
-    if funding_container.button('Generate funding statement'):
+
+    if funding_container.button("Generate funding statement"):
         st.session_state.funding = hlt.generate_content(
             client=st.session_state.client,
             container=funding_container,
@@ -619,7 +599,7 @@ if uploaded_file is not None:
             temperature=0.0,
             box_height=200,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         ).replace('"', "")
 
     else:
@@ -628,7 +608,7 @@ if uploaded_file is not None:
                 label="Funding statement",
                 value=st.session_state.funding,
                 label_visibility="collapsed",
-                height=200
+                height=200,
             )
 
     # point of contact box
@@ -637,20 +617,19 @@ if uploaded_file is not None:
 
     # select the POC information from the dropdown
     st.session_state.point_of_contact = st.session_state.project_dict[
-            poc_container.selectbox(
+        poc_container.selectbox(
             label="Select the project who funded the work:",
             options=[
-                "COMPASS-GLM", 
-                "GCIMS", 
+                "COMPASS-GLM",
+                "GCIMS",
                 "ICoM",
                 "IM3",
                 "Puget Sound",
                 "Other",
-            ]
+            ],
         )
     ]
 
-    
     poc_container.write("What will be written to the document as the point of contact:")
     poc_parts = st.session_state.point_of_contact.split("\n")
     poc_container.success(
@@ -666,23 +645,25 @@ if uploaded_file is not None:
 
     # template parameters
     word_parameters = {
-        'title': st.session_state.title_response,
-        'subtitle': st.session_state.subtitle_response,
-        'photo': st.session_state.photo,
-        'photo_link': st.session_state.photo_link,
-        'photo_site_name': st.session_state.photo_site_name,
-        'image_caption': st.session_state.figure_caption,
-        'science': st.session_state.science_response,
-        'impact': st.session_state.impact_response,
-        'summary': st.session_state.summary_response,
-        'funding': st.session_state.funding,
-        'citation': st.session_state.citation,
-        'related_links': st.session_state.related_links,
-        'point_of_contact': st.session_state.point_of_contact,
+        "title": st.session_state.title_response,
+        "subtitle": st.session_state.subtitle_response,
+        "photo": st.session_state.photo,
+        "photo_link": st.session_state.photo_link,
+        "photo_site_name": st.session_state.photo_site_name,
+        "image_caption": st.session_state.figure_caption,
+        "science": st.session_state.science_response,
+        "impact": st.session_state.impact_response,
+        "summary": st.session_state.summary_response,
+        "funding": st.session_state.funding,
+        "citation": st.session_state.citation,
+        "related_links": st.session_state.related_links,
+        "point_of_contact": st.session_state.point_of_contact,
     }
 
     # template word document
-    word_template_file = importlib.resources.files('highlight.data').joinpath('highlight_template.docx')
+    word_template_file = importlib.resources.files("highlight.data").joinpath(
+        "highlight_template.docx"
+    )
     template = DocxTemplate(word_template_file)
 
     template.render(word_parameters)
@@ -693,7 +674,7 @@ if uploaded_file is not None:
             label="Export Word Document",
             data=bio.getvalue(),
             file_name="modified_template.docx",
-            mime="docx"
+            mime="docx",
         )
 
     # power point slide content
@@ -703,28 +684,26 @@ if uploaded_file is not None:
     objective_container = st.container()
     objective_container.markdown("##### Generate objective summary from text content")
 
-    objective_container.markdown("""
+    objective_container.markdown(
+        """
     **GOAL**:  Generate one sentence stating the core purpose of the study.
-    
+
     The sentence should meet the following criteria:
     - Use active verbs for the start of each point.
     - Use present tense.
     - Do not include methodology related to statistical, technological, and theory based
-    """)
+    """
+    )
 
     objective_container.markdown("Set desired temperature:")
 
     # slider
     objective_temperature = objective_container.slider(
-        "Objective Temperature",
-        0.0,
-        1.0,
-        0.3,
-        label_visibility="collapsed"
+        "Objective Temperature", 0.0, 1.0, 0.3, label_visibility="collapsed"
     )
 
     # build container content
-    if objective_container.button('Generate Objective'):
+    if objective_container.button("Generate Objective"):
         st.session_state.objective_response = hlt.generate_content(
             client=st.session_state.client,
             container=objective_container,
@@ -735,7 +714,7 @@ if uploaded_file is not None:
             temperature=objective_temperature,
             box_height=250,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -745,35 +724,33 @@ if uploaded_file is not None:
                 label="Objective Result:",
                 value=st.session_state.objective_response,
                 label_visibility="collapsed",
-                height=250
+                height=250,
             )
 
     # approach section
     approach_container = st.container()
     approach_container.markdown("##### Generate approach summary from text content")
 
-    approach_container.markdown("""
+    approach_container.markdown(
+        """
     **GOAL**:  Clearly and concisely state in 2-3 short points how this work accomplished the stated objective from a methodolgocial perspecive.
-    - Based off of the objective summary 
-    - Only include methodology including but not limited to: statistical, technological, and theory based approaches. 
+    - Based off of the objective summary
+    - Only include methodology including but not limited to: statistical, technological, and theory based approaches.
     - Use a different action verb to start sentences than what is used to begin the objective statement.
-    - Use active verbs for the start of each point.  
+    - Use active verbs for the start of each point.
     - Use present tense.
-    """)
+    """
+    )
 
     approach_container.markdown("Set desired temperature:")
 
     # slider
     approach_temperature = approach_container.slider(
-        "Approach Temperature",
-        0.0,
-        1.0,
-        0.1,
-        label_visibility="collapsed"
+        "Approach Temperature", 0.0, 1.0, 0.1, label_visibility="collapsed"
     )
 
     # build container content
-    if approach_container.button('Generate Approach'):
+    if approach_container.button("Generate Approach"):
         st.session_state.approach_response = hlt.generate_content(
             client=st.session_state.client,
             container=approach_container,
@@ -785,7 +762,7 @@ if uploaded_file is not None:
             box_height=250,
             additional_content=st.session_state.objective_response,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -795,15 +772,16 @@ if uploaded_file is not None:
                 label="Approach Result:",
                 value=st.session_state.approach_response,
                 label_visibility="collapsed",
-                height=250
+                height=250,
             )
 
     # power point impact section
     ppt_impact_container = st.container()
     ppt_impact_container.markdown("##### Generate impact points from text content")
 
-    ppt_impact_container.markdown("""
-    **GOAL**:  Clearly and concisely state in 3 points the key results and outcomes from this research. 
+    ppt_impact_container.markdown(
+        """
+    **GOAL**:  Clearly and concisely state in 3 points the key results and outcomes from this research.
     - State what the results indicate.
     - Include results that may be considered profound or surprising.
     - Each point should be 1 concise sentence.
@@ -815,15 +793,11 @@ if uploaded_file is not None:
 
     # slider
     ppt_impact_temperature = ppt_impact_container.slider(
-        "Impact Points Temperature",
-        0.0,
-        1.0,
-        0.1,
-        label_visibility="collapsed"
+        "Impact Points Temperature", 0.0, 1.0, 0.1, label_visibility="collapsed"
     )
 
     # build container content
-    if ppt_impact_container.button('Generate Impact Points'):
+    if ppt_impact_container.button("Generate Impact Points"):
         st.session_state.ppt_impact_response = hlt.generate_content(
             client=st.session_state.client,
             container=ppt_impact_container,
@@ -834,7 +808,7 @@ if uploaded_file is not None:
             temperature=ppt_impact_temperature,
             box_height=250,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -844,35 +818,33 @@ if uploaded_file is not None:
                 label="Impact Points Result:",
                 value=st.session_state.ppt_impact_response,
                 label_visibility="collapsed",
-                height=250
+                height=250,
             )
 
     # power point figure selection section
     ppt_figure_selection = st.container()
     ppt_figure_selection.markdown("##### Select a representative figure from the paper")
 
-    ppt_figure_selection.markdown("""
+    ppt_figure_selection.markdown(
+        """
     **GOAL**:  What figure best represents the high impact content that can be easily understood by a non-technical, non-scientifc audience.
-    
+
     Limit the response to:
     1. The figure name as it is written in the text,
     2. An explanation of why it was chosen,
     3. And what the figure is about in less than 50 words.
-    """)
+    """
+    )
 
     ppt_figure_selection.markdown("Set desired temperature:")
 
     # slider
     ppt_figure_selection_temperature = ppt_figure_selection.slider(
-        "Figure recommendation Temperature",
-        0.0,
-        1.0,
-        0.2,
-        label_visibility="collapsed"
+        "Figure recommendation Temperature", 0.0, 1.0, 0.2, label_visibility="collapsed"
     )
 
     # build container content
-    if ppt_figure_selection.button('Generate Figure Recommendation'):
+    if ppt_figure_selection.button("Generate Figure Recommendation"):
         st.session_state.figure_recommendation = hlt.generate_content(
             client=st.session_state.client,
             container=ppt_figure_selection,
@@ -883,7 +855,7 @@ if uploaded_file is not None:
             temperature=ppt_figure_selection_temperature,
             box_height=250,
             max_allowable_tokens=st.session_state.max_allowable_tokens,
-            model=st.session_state.model
+            model=st.session_state.model,
         )
 
     else:
@@ -893,23 +865,29 @@ if uploaded_file is not None:
                 label="Figure Recommendation Result:",
                 value=st.session_state.figure_recommendation,
                 label_visibility="collapsed",
-                height=250
+                height=250,
             )
 
     # Add PowerPoint export container at the end
     export_ppt_container = st.container()
-    export_ppt_container.markdown("##### Export PowerPoint Presentation with New Content")
+    export_ppt_container.markdown(
+        "##### Export PowerPoint Presentation with New Content"
+    )
 
-    if ("title_response" in st.session_state and
-        "objective_response" in st.session_state and
-        "ppt_impact_response" in st.session_state and
-        "approach_response" in st.session_state):
+    if (
+        "title_response" in st.session_state
+        and "objective_response" in st.session_state
+        and "ppt_impact_response" in st.session_state
+        and "approach_response" in st.session_state
+    ):
 
-        if export_ppt_container.button('Export PowerPoint'):
+        if export_ppt_container.button("Export PowerPoint"):
 
             try:
                 # Load the PowerPoint template
-                ppt_template_file = importlib.resources.files('highlight.data').joinpath('highlight_template.pptx')
+                ppt_template_file = importlib.resources.files(
+                    "highlight.data"
+                ).joinpath("highlight_template.pptx")
                 prs = Presentation(ppt_template_file)
 
                 # Split the impact and approach responses into bullet points (assuming they are separated by newlines)
@@ -927,7 +905,9 @@ if uploaded_file is not None:
                                 # Ensure font size and bold settings are maintained for each paragraph
                                 for paragraph in shape.text_frame.paragraphs:
                                     for run in paragraph.runs:
-                                        run.font.size = Pt(24)  # Example size, adjust as needed
+                                        run.font.size = Pt(
+                                            24
+                                        )  # Example size, adjust as needed
                                         run.font.bold = True  # Maintain bold
                                         run.alignment = PP_ALIGN.LEFT  # Align title
 
@@ -938,13 +918,19 @@ if uploaded_file is not None:
                                 # Ensure font size and bold settings are maintained for each paragraph
                                 for paragraph in shape.text_frame.paragraphs:
                                     for run in paragraph.runs:
-                                        run.font.size = Pt(11)  # Example size for citation, adjust as needed
-                                        run.font.bold = False  # Citation typically isn't bold
+                                        run.font.size = Pt(
+                                            11
+                                        )  # Example size for citation, adjust as needed
+                                        run.font.bold = (
+                                            False  # Citation typically isn't bold
+                                        )
                                         run.alignment = PP_ALIGN.LEFT  # Align citation
 
                             if shape.text_frame.text == "objective_0":
                                 # Set the text of the text box to the objective response
-                                shape.text_frame.text = st.session_state.objective_response
+                                shape.text_frame.text = (
+                                    st.session_state.objective_response
+                                )
 
                                 # Optional: Adjust font size and alignment for the objective
                                 for paragraph in shape.text_frame.paragraphs:
@@ -957,11 +943,15 @@ if uploaded_file is not None:
                                 shape.text_frame.clear()
 
                                 # Add bullet points for approach
-                                for i, approach_point in enumerate(approach_points[:3]):  # Only take the first 3 approach points
+                                for i, approach_point in enumerate(
+                                    approach_points[:3]
+                                ):  # Only take the first 3 approach points
                                     p = shape.text_frame.add_paragraph()
                                     p.text = approach_point
                                     p.level = 0  # This sets it as a bullet point
-                                    p.font.size = Pt(13)  # Adjust bullet point font size
+                                    p.font.size = Pt(
+                                        13
+                                    )  # Adjust bullet point font size
                                     p.alignment = PP_ALIGN.LEFT  # Align bullet points
 
                             # Handle the impact bullet points in the same text box
@@ -970,11 +960,15 @@ if uploaded_file is not None:
                                 shape.text_frame.clear()
 
                                 # Add bullet points for impact
-                                for i, impact_point in enumerate(impact_points[:3]):  # Only take the first 3 impact points
+                                for i, impact_point in enumerate(
+                                    impact_points[:3]
+                                ):  # Only take the first 3 impact points
                                     p = shape.text_frame.add_paragraph()
                                     p.text = impact_point
                                     p.level = 0  # This sets it as a bullet point
-                                    p.font.size = Pt(13)  # Adjust bullet point font size
+                                    p.font.size = Pt(
+                                        13
+                                    )  # Adjust bullet point font size
                                     p.alignment = PP_ALIGN.LEFT  # Align bullet points
 
                 # Save the modified presentation to a BytesIO object
@@ -987,13 +981,20 @@ if uploaded_file is not None:
                     label="Export PowerPoint Presentation",
                     data=ppt_io,
                     file_name="modified_highlight_template.pptx",
-                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 )
 
-                export_ppt_container.success("PowerPoint presentation generated successfully!", icon="✅")
+                export_ppt_container.success(
+                    "PowerPoint presentation generated successfully!", icon="✅"
+                )
 
             except Exception as e:
-                export_ppt_container.error(f"An error occurred while generating the PowerPoint: {e}", icon="🚨")
+                export_ppt_container.error(
+                    f"An error occurred while generating the PowerPoint: {e}", icon="🚨"
+                )
 
     else:
-        export_ppt_container.error("Please generate the objective and impact responses before exporting.", icon="⚠️")
+        export_ppt_container.error(
+            "Please generate the objective and impact responses before exporting.",
+            icon="⚠️",
+        )

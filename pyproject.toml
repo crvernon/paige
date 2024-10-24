@@ -24,11 +24,14 @@ dependencies = [
     'pypdf>=3.0.1',
     'tiktoken>=0.7.0',
     'tqdm>=4.66.1',
+    'langchain_openai>=0.2.2',
+    "tomli; python_version < '3.11'"
 ]
 classifiers = [
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +42,25 @@ test = [
 
 deploy = [
     "twine>=4.0.1",
+]
+ollama = [
+    "langchain_ollama>=0.2.0"
+]
+
+dartmouth = [
+    "langchain_dartmouth>=0.2.11; python_version > '3.9'"
+]
+
+anthropic = [
+    "langchain_anthropic>=0.2.3"
+]
+
+google = [
+    "langchain-google-genai>=2.0.1"
+]
+
+mistral = [
+    "langchain_mistralai>=0.2.0"
 ]
 
 [project.urls]

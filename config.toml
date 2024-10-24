@@ -1,0 +1,58 @@
+[llm]
+
+[llm.anthropic]
+models = ["claude-3-5-sonnet-20240620", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+
+[llm.anthropic.claude-3-5-sonnet-20240620]
+max_allowable_tokens = 200000
+
+[llm.anthropic.claude-3-opus-20240229]
+max_allowable_tokens = 200000
+
+[llm.anthropic.claude-3-sonnet-20240229]
+max_allowable_tokens = 200000
+
+[llm.anthropic.claude-3-haiku-20240307]
+max_allowable_tokens = 200000
+
+[llm.google]
+models = ["gemini-1.5-flash-8b"]
+
+[llm.google."gemini-1.5-flash-8b"]
+max_allowable_tokens = 1_000_000
+
+[llm.mistral]
+models = ["mistral-small-latest"]
+
+[llm.mistral.mistral-small-latest]
+max_allowable_tokens = 32000
+
+[llm.openai]
+models = ["gpt-4o", "gpt-4", "gpt-3.5-turbo-16k", "gpt-3.5-turbo"]
+
+[llm.openai.gpt-4o]
+max_allowable_tokens = 150000
+
+[llm.openai.gpt-4]
+max_allowable_tokens = 8192
+
+[llm.openai."gpt-3.5-turbo"]
+max_allowable_tokens = 4096
+
+[llm.openai."gpt-3.5-turbo-16k"]
+max_allowable_tokens = 16384
+
+[llm.ollama]
+models = ["llama3.2:1b", "llama3.1:latest"]
+
+[llm.ollama."llama3.2:1b"]
+max_allowable_tokens = 128000
+
+[llm.ollama."llama3.1:latest"]
+max_allowable_tokens = 128000
+
+[llm.dartmouth]
+models = ["llama-3-1-8b-instruct"]
+
+[llm.dartmouth."llama-3-1-8b-instruct"]
+max_allowable_tokens = 95000
