@@ -102,7 +102,8 @@ def content_reduction(
     client,
     document_list,
     system_scope,
-    model
+    model,
+    package: str = "langchain_azure_openai"
 ):
     """
     Reduce the input text by removing irrelevant content.
@@ -129,14 +130,24 @@ def content_reduction(
             {"role": "user", "content": prompt.format(text=page_content)}
         ]
 
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=page_tokens,
-            temperature=0.0,
-            messages=messages
-        )
+        if package == "openai":
+            response = client.chat.completions.create(
+                model=model,
+                max_tokens=page_tokens,
+                temperature=0.0,
+                messages=messages
+            )
 
-        content += response.choices[0].message.content
+            content += response.choices[0].message.content
+
+        elif package == "langchain_azure_openai":
+            response = client.invoke(
+                messages,
+                max_tokens=page_tokens,
+                temperature=0.0,
+            )
+
+        content = response.content
 
     return content
 
@@ -148,7 +159,8 @@ def generate_prompt_content(
     max_tokens=50,
     temperature=0.0,
     max_allowable_tokens=8192,
-    model="gpt-4o"
+    model="gpt-4o",
+    package="langchain_azure_openai"
 ):
     """
     Generate content using the OpenAI API based on the provided prompt and parameters.
@@ -182,14 +194,25 @@ def generate_prompt_content(
         {"role": "user", "content": prompt}
     ]
 
-    response = client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=messages
-    )
+    if package == "openai":
 
-    content = response.choices[0].message.content
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=messages
+        )
+
+        content = response.choices[0].message.content
+
+    elif package == "langchain_azure_openai":
+        response = client.invoke(
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
+        content = response.content
 
     return content
 
@@ -207,7 +230,8 @@ def generate_content(
     max_word_count=100,
     min_word_count=75,
     max_allowable_tokens: int = 150000,
-    model="gpt-4o"
+    model: str = "gpt-4o",
+    package: str = "langchain_azure_openai"
 ):
     """
     Generate content using the OpenAI API based on the provided parameters and display it in a Streamlit container.
@@ -238,7 +262,8 @@ def generate_content(
         max_tokens=max_tokens,
         max_allowable_tokens=max_allowable_tokens,
         additional_content=additional_content,
-        model=model
+        model=model,
+        package=package
     )
 
     container.markdown(result_title)
@@ -255,14 +280,24 @@ def generate_content(
             {"role": "user", "content": reduction_prompt}
         ]
 
-        reduced_response = client.chat.completions.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            messages=messages
-        )
+        if package == "openai":
+            reduced_response = client.chat.completions.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                messages=messages
+            )
 
-        response = reduced_response.choices[0].message.content
+            response = reduced_response.choices[0].message.content
+
+        elif package == "langchain_azure_openai":
+            reduced_response = client.invoke(
+                messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+
+            response = reduced_response.content
 
     container.text_area(
         label=result_title,
@@ -284,7 +319,8 @@ def generate_prompt(
     max_allowable_tokens: int = 150000,
     temperature: float = 0.0,
     additional_content: str = None,
-    model: str = "gpt-4"
+    model: str = "gpt-4",
+    package: str = "langchain_azure_openai"
 ) -> str:
     """
     Generate a prompt using the provided parameters and the prompt queue.
@@ -348,5 +384,6 @@ def generate_prompt(
         max_tokens=max_tokens,
         temperature=temperature,
         max_allowable_tokens=max_allowable_tokens,
-        model=model
+        model=model,
+        package=package
     )
