@@ -235,4 +235,46 @@ prompt_queue = {
     TEXT: {0}
     RESPONSE:
     """,
+
+    "figure_list": """
+    Scan the text delimited by triple backticks. Identify all **figure references** (e.g., "Figure 1", "Fig. 2a").
+    **IMPORTANT: Do NOT include references to Tables (e.g., "Table 1"). Only include items identified explicitly as Figures.**
+
+    For each identified figure:
+    1. Extract its identifier (e.g., "Figure 1", "Fig. 2a").
+    2. Find the corresponding caption text in the paper for that figure.
+    3. Create a very short summary (5-10 words) of what the figure shows based on its caption.
+    Return a list where each line contains the figure identifier, followed by ' :: ', followed by the short summary.
+    - Do not include figures if you cannot find their caption.
+    - Ensure each entry is on a new line.
+    - Do not include any other text, introduction, or explanation.
+
+    Example Response (Notice no Tables):
+    Figure 1 :: Model simulation results under baseline conditions.
+    Figure 2a :: Comparison of observed vs. simulated streamflow.
+    Figure 2b :: Spatial map of precipitation anomalies.
+    Fig. 3 :: Sensitivity analysis of parameter X.
+
+    TEXT:
+    ```{0}```
+
+    RESPONSE:
+    """,
+
+    "selected_figure_caption": """
+    Based on the text delimited by triple backticks, generate a concise caption for the specific figure identified as '{1}'.
+    - The caption should explain what the figure shows or represents in the context of the research.
+    - Aim for clarity and conciseness, understandable to a non-expert if possible.
+    - Limit the response to a single sentence or at most 50 words.
+    - Do not include the figure identifier (like '{1}:') at the beginning of the caption.
+    - Return only the caption text.
+
+    TEXT:
+    ```{0}```
+
+    FIGURE IDENTIFIER: {1}
+
+    RESPONSE:
+    """,
+
 }

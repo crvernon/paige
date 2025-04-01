@@ -6,9 +6,11 @@ from docxtpl import DocxTemplate
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor 
+
 import streamlit as st
-from openai import OpenAI
-from langchain_openai import AzureChatOpenAI
+# from openai import OpenAI
+from langchain_openai import AzureChatOpenAI, OpenAI
 
 
 import highlight as hlt
@@ -124,6 +126,17 @@ if "project_dict" not in st.session_state:
         "Puget Sound": "Ning Sun\nPuget Sound Scoping and Pilot Study Principal Investigator\nning.sun@pnnl.gov",
         "Other": "First and Last Name\nCorresponding Project Name with POC Credentials\nEmail Address",
     }
+
+# Figure selection state
+if "figure_list" not in st.session_state:
+    st.session_state.figure_list = None # Will hold the list ['Figure 1', 'Fig 2', ...]
+
+if "selected_figure" not in st.session_state:
+    st.session_state.selected_figure = None # Will hold the user's choice, e.g., 'Figure 1'
+
+if "selected_figure_caption" not in st.session_state:
+    st.session_state.selected_figure_caption = None # Will hold the generated caption for the selected figure
+
 
 # Force responsive layout for columns also on mobile
 st.write(
@@ -906,54 +919,131 @@ if st.session_state.access:
                     height=250
                 )
 
-        # power point figure selection section
-        ppt_figure_selection = st.container()
-        ppt_figure_selection.markdown("##### Select a representative figure from the paper")
+###  NEW SECTION --
 
-        ppt_figure_selection.markdown("""
-        **GOAL**:  What figure best represents the high impact content that can be easily understood by a non-technical, non-scientifc audience.
-        
-        Limit the response to:
-        1. The figure name as it is written in the text,
-        2. An explanation of why it was chosen,
-        3. And what the figure is about in less than 50 words.
-        """)
+        # --- New Figure Selection and Caption Section ---
+        st.markdown("##### Select Figure and Generate Caption for PowerPoint:")
+        figure_select_container = st.container(border=True) # Use border for visual grouping
 
-        ppt_figure_selection.markdown("Set desired temperature:")
+        figure_select_container.markdown("##### 1. Extract Figure/Table List from Paper")
+        if figure_select_container.button("List Figures/Tables"):
+            with st.spinner("Extracting figure list from paper..."):
+                try:
+                    # Use the lower-level generate_prompt function to get the raw list
+                    figure_list_raw = hlt.generate_prompt(
+                        client=st.session_state.client,
+                        content=content_dict["content"],
+                        prompt_name="figure_list",
+                        max_tokens=500, # Adjust as needed
+                        temperature=0.0, # Low temp for extraction
+                        max_allowable_tokens=st.session_state.max_allowable_tokens,
+                        model=st.session_state.model,
+                        package=st.session_state.package
+                    )
 
-        # slider
-        ppt_figure_selection_temperature = ppt_figure_selection.slider(
-            "Figure recommendation Temperature",
-            0.0,
-            1.0,
-            0.2,
-            label_visibility="collapsed"
-        )
+                    
+                    parsed_figures = {}
+                    lines = figure_list_raw.strip().split('\n')
+                    for line in lines:
+                        # Primary Filter: Skip line if it seems to be a table reference
+                        if line.strip().lower().startswith("table"):
+                            continue # Skip this line entirely
 
-        # build container content
-        if ppt_figure_selection.button('Generate Figure Recommendation'):
-            st.session_state.figure_recommendation = hlt.generate_content(
-                client=st.session_state.client,
-                container=ppt_figure_selection,
-                content=content_dict["content"],
-                prompt_name="figure_choice",
-                result_title="Figure Recommendation Result:",
-                max_tokens=300,
-                temperature=ppt_figure_selection_temperature,
-                box_height=250,
-                max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
+                        if ' :: ' in line:
+                            parts = line.split(' :: ', 1)
+                            identifier = parts[0].strip()
+                            description = parts[1].strip()
+
+                            # Secondary Filter: Double-check identifier doesn't start with "Table"
+                            if identifier and description and not identifier.lower().startswith("table"):
+                                parsed_figures[identifier] = description
+                            # else: # Optional logging for filtered items
+                                # print(f"Filtered out potential table: {identifier}")
+
+                    st.session_state.figure_data = parsed_figures
+                    st.session_state.selected_figure_id = None # Reset selection
+                    st.session_state.selected_figure_caption = None # Reset caption
+
+                    if not st.session_state.figure_data:
+                        # Updated message
+                        figure_select_container.warning("Could not extract any figure identifiers with descriptions. Ensure figures are clearly captioned in the PDF.")
+                    else:
+                        # Updated message
+                        figure_select_container.success(f"Found {len(st.session_state.figure_data)} figures with descriptions.")
+
+                except Exception as e:
+                    figure_select_container.error(f"Error extracting figure list: {e}")
+                    st.session_state.figure_data = None
+
+
+        if st.session_state.figure_list:
+            figure_select_container.markdown("##### 2. Select Figure/Table")
+            # Add a 'None' option to allow deselection or represent initial state
+            options = ["<Select a Figure/Table>"] + st.session_state.figure_list
+            selected = figure_select_container.selectbox(
+                "Choose the figure or table you want to use:",
+                options=options,
+                index=options.index(st.session_state.selected_figure) if st.session_state.selected_figure in options else 0,
+                label_visibility="collapsed"
             )
 
-        else:
-            if st.session_state.figure_recommendation is not None:
-                ppt_figure_selection.markdown("Figure Recommendation Result:")
-                ppt_figure_selection.text_area(
-                    label="Figure Recommendation Result:",
-                    value=st.session_state.figure_recommendation,
-                    label_visibility="collapsed",
-                    height=250
-                )
+            # Update session state only if a valid selection is made
+            if selected != "<Select a Figure/Table>":
+                if st.session_state.selected_figure != selected:
+                    st.session_state.selected_figure = selected
+                    st.session_state.selected_figure_caption = None # Reset caption when selection changes
+            else:
+                 st.session_state.selected_figure = None # Set back to None if placeholder is chosen
+
+
+        if st.session_state.selected_figure:
+            figure_select_container.markdown(f"##### 3. Generate Caption for {st.session_state.selected_figure}")
+
+            # Caption Temperature Slider
+            figure_select_container.markdown("Set desired temperature for caption generation:")
+            caption_temperature = figure_select_container.slider(
+                "Selected Figure Caption Temperature",
+                0.0, 1.0, 0.2, # Default to slightly creative but mostly factual
+                key="selected_fig_caption_temp", # Unique key
+                label_visibility="collapsed"
+            )
+
+            if figure_select_container.button(f"Generate Caption for {st.session_state.selected_figure}"):
+                 with st.spinner(f"Generating caption for {st.session_state.selected_figure}..."):
+                    try:
+                        # Use generate_prompt again for the caption
+                         caption_response = hlt.generate_prompt(
+                            client=st.session_state.client,
+                            content=content_dict["content"],
+                            prompt_name="selected_figure_caption",
+                            additional_content=st.session_state.selected_figure, # Pass the selected figure ID
+                            max_tokens=150, # ~50 words + buffer
+                            temperature=caption_temperature,
+                            max_allowable_tokens=st.session_state.max_allowable_tokens,
+                            model=st.session_state.model,
+                            package=st.session_state.package
+                         )
+                         st.session_state.selected_figure_caption = caption_response.strip()
+                         figure_select_container.success("Caption generated!")
+                    except Exception as e:
+                         figure_select_container.error(f"Error generating caption: {e}")
+                         st.session_state.selected_figure_caption = None
+
+        # Display the generated caption if available
+        if st.session_state.selected_figure_caption:
+             figure_select_container.markdown("##### Generated Caption:")
+             figure_select_container.text_area(
+                 label="Generated Caption Result:",
+                 value=st.session_state.selected_figure_caption,
+                 height=100,
+                 key="selected_fig_caption_display",
+                 label_visibility="collapsed"
+             )
+        elif st.session_state.selected_figure:
+            # Show if figure selected but caption not generated yet
+             figure_select_container.info("Click the button above to generate the caption.")
+
+### END NEW SECTION ---
 
         # Add PowerPoint export container at the end
         export_ppt_container = st.container()
@@ -977,6 +1067,22 @@ if st.session_state.access:
                 for slide in prs.slides:
                     for shape in slide.shapes:
                         if shape.has_text_frame:
+
+                            # Add this block to handle the figure caption:
+                            if "caption" in shape.text_frame.text:
+                                if st.session_state.selected_figure_caption:
+                                    shape.text_frame.text = st.session_state.selected_figure_caption
+                                    # Adjust font size/style as needed
+                                    for paragraph in shape.text_frame.paragraphs:
+                                        paragraph.font.size = Pt(10)  # Set font size to 10
+                                        paragraph.font.name = 'Arial'  # Set font to Arial
+                                        paragraph.font.bold = True  # Set font to bold
+                                        paragraph.font.color.rgb = RGBColor(0, 0, 255)  # Set font color to blue
+                                        paragraph.alignment = PP_ALIGN.CENTER  # Example alignment
+                                else:
+                                    # Handle case where caption wasn't generated - maybe leave placeholder or put default text
+                                    shape.text_frame.text = "[Figure caption not generated]"
+
                             # Handle title insertion and maintain font size and bold
                             if "title" in shape.text_frame.text:
                                 shape.text_frame.text = st.session_state.title_response

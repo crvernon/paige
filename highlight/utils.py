@@ -319,7 +319,7 @@ def generate_prompt(
     max_allowable_tokens: int = 150000,
     temperature: float = 0.0,
     additional_content: str = None,
-    model: str = "gpt-4",
+    model: str = "gpt-4o",
     package: str = "langchain_azure_openai"
 ) -> str:
     """
@@ -362,24 +362,42 @@ def generate_prompt(
             additional_content
         )
 
+    elif prompt_name in ("approach", "subtitle", "selected_figure_caption"): # Added "selected_figure_caption"
+        if additional_content is None:
+             # For selected_figure_caption, additional_content holds the figure ID
+             if prompt_name == "selected_figure_caption":
+                 # Handle cases where additional_content might not be provided, although it should be
+                 # Maybe raise an error or provide default behavior
+                 if additional_content is None:
+                    raise ValueError("additional_content (figure identifier) is required for 'selected_figure_caption' prompt.")
+             else:
+                # Default behavior for approach, subtitle if additional_content is None
+                additional_content = content
+
+        prompt = prompts.prompt_queue[prompt_name].format(
+            content,
+            additional_content
+        )
+
     elif prompt_name in (
-        "figure", 
-        "caption", 
-        "impact", 
-        "summary", 
-        "title", 
-        "science", 
+        "figure",
+        "caption", # Assuming this is the old general caption prompt
+        "impact",
+        "summary",
+        "title",
+        "science",
         "ppt_impact",
-        "figure_caption", 
-        "figure_choice", 
+        "figure_caption", # Assuming this is the old general caption prompt
+        "figure_choice",
         "citation",
-        "funding"
+        "funding",
+        "figure_list" # Added "figure_list"
     ):
         prompt = prompts.prompt_queue[prompt_name].format(content)
 
     return generate_prompt_content(
         client=client,
-        system_scope=prompts.SYSTEM_SCOPE,
+        system_scope=prompts.SYSTEM_SCOPE, # Use SYSTEM_SCOPE from prompts.py
         prompt=prompt,
         max_tokens=max_tokens,
         temperature=temperature,
