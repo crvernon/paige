@@ -1,20 +1,35 @@
 import io
 import os
 import importlib
+import re 
 
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Mm, Inches
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor 
-
 import streamlit as st
 # from openai import OpenAI
 from langchain_openai import AzureChatOpenAI, OpenAI
+import requests
+
 
 import highlight as hlt
 from highlight.utils import ApproachPoints, PydanticOutputParser, ImpactPoints
 import highlight.prompts as prompts
+
+
+def sanitize_filename(name):
+    """Removes or replaces characters invalid for filenames."""
+    # Remove characters not alphanumeric, underscore, hyphen, or period
+    name = re.sub(r'[^\w\-\.]', '_', name)
+    # Replace multiple consecutive underscores
+    name = re.sub(r'_+', '_', name)
+    # Remove leading/trailing underscores/periods
+    name = name.strip('_.')
+    # Limit length (optional but good practice)
+    return name[:100] if len(name) > 100 else name
 
 
 if "reduce_document" not in st.session_state:
@@ -75,6 +90,14 @@ if "figure_response" not in st.session_state:
 
 if "figure_caption" not in st.session_state:
     st.session_state.figure_caption = None
+
+if "figure_data" not in st.session_state:
+    # Stores dict like {'Figure 1': 'Description...'} extracted from the paper for PPT selection
+    st.session_state.figure_data = None
+
+if "selected_figure_id" not in st.session_state:
+    # Stores the ID (e.g., 'Figure 1') selected from the paper for the PPT slide
+    st.session_state.selected_figure_id = None
 
 if "caption_response" not in st.session_state:
     st.session_state.caption_response = None
@@ -138,6 +161,22 @@ if "selected_figure" not in st.session_state:
 if "selected_figure_caption" not in st.session_state:
     st.session_state.selected_figure_caption = None # Will hold the generated caption for the selected figure
 
+if "wikimedia_query" not in st.session_state:
+    st.session_state.wikimedia_query = ""
+
+if "wikimedia_results" not in st.session_state:
+    st.session_state.wikimedia_results = None # List of image dicts
+
+if "selected_wikimedia_image_info" not in st.session_state:
+    st.session_state.selected_wikimedia_image_info = None # Dict of selected image
+
+if "wikimedia_limit" not in st.session_state:
+    st.session_state.wikimedia_limit = 5
+
+# States related to the chosen photo for the Word doc
+if "photo" not in st.session_state: st.session_state.photo = None # Will hold BytesIO
+if "photo_link" not in st.session_state: st.session_state.photo_link = None
+if "photo_site_name" not in st.session_state: st.session_state.photo_site_name = None
 
 # Force responsive layout for columns also on mobile
 st.write(
@@ -554,95 +593,250 @@ if st.session_state.access:
                     height=400
                 )
 
-        # figure recommendations section
-        figure_container = st.container()
-        figure_container.markdown("##### Generate figure search string recommendations from the general summary")
-        figure_container.markdown("These search strings can be used to find relevant splash images from search engines that host open-licenced images.")
+# ------------------------------------------------
+# -- DOC:  START PHOTO SELECTION --> 
+# ------------------------------------------------
 
-        # slider
-        figure_container.markdown("Set desired temperature:")
-        figure_temperature = figure_container.slider(
-            "Figure Recommendations Temperature",
-            0.0,
-            1.0,
-            0.9,
-            label_visibility="collapsed"
-        )
+        st.markdown("### Find Image for Word Document (Wikimedia Commons)")
+        # --- Main Container for this Section ---
+        img_search_container = st.container(border=True)
 
-        # build container content
-        if figure_container.button('Generate Figure Search Strings'):
+        # --- Determine Default Query ---
+        default_query = ""
+        if st.session_state.title_response:
+            default_query = st.session_state.title_response
+        elif st.session_state.summary_response:
+            default_query = " ".join(st.session_state.summary_response.split()[:15])
 
-            if st.session_state.summary_response is None:
-                st.write("Please generate a general summary first.")
-            else:
-                st.session_state.figure_response = hlt.generate_content(
-                    client=st.session_state.client,
-                    container=figure_container,
-                    content=st.session_state.summary_response,
-                    prompt_name="figure",
-                    result_title="Figure Search String Recommendations Result:",
-                    max_tokens=200,
-                    temperature=figure_temperature,
-                    box_height=200,
-                    max_allowable_tokens=st.session_state.max_allowable_tokens,
-                    model=st.session_state.model
+        # --- Search Controls Row ---
+        controls_cols = img_search_container.columns([3, 1, 1]) # Query | Limit | Search Button
+
+        with controls_cols[0]: # Search Query Input
+            user_query = st.text_input(
+                "Image Search Query:",
+                value=st.session_state.get("wikimedia_query", default_query),
+                key="wikimedia_query_input"
+            )
+            st.session_state.wikimedia_query = user_query
+
+        with controls_cols[1]: # Number of Images Input
+            num_images = st.number_input(
+                "Max Results:", min_value=3, max_value=30,
+                value=st.session_state.wikimedia_limit, step=3,
+                key="wikimedia_limit_input", help="Number of images to retrieve (max 30)"
+            )
+            st.session_state.wikimedia_limit = int(num_images)
+
+        with controls_cols[2]: # Search Button
+            st.write("") # Placeholder for spacing
+            st.write("")
+            search_button = st.button("Search", key="wiki_search_btn", use_container_width=True)
+
+
+        # --- Clear Button ---
+        if st.session_state.wikimedia_results or st.session_state.selected_wikimedia_image_info:
+            if img_search_container.button("Clear Search / Reset Selection", key="wiki_clear_btn"):
+                st.session_state.wikimedia_results = None
+                st.session_state.selected_wikimedia_image_info = None
+                st.session_state.photo = None
+                st.session_state.photo_link = None
+                st.session_state.photo_site_name = None
+                st.rerun()
+
+        # --- Execute Search ---
+        if search_button and st.session_state.wikimedia_query:
+            with st.spinner("Searching Wikimedia Commons..."):
+                st.session_state.wikimedia_results = hlt.search_wikimedia_commons(
+                    query=st.session_state.wikimedia_query,
+                    limit=st.session_state.wikimedia_limit
                 )
+                st.session_state.selected_wikimedia_image_info = None # Reset previous selection
+                if not st.session_state.wikimedia_results:
+                    img_search_container.info("No suitable images found for your query.")
+                # No rerun here, let results display immediately below
+                # st.rerun() # Removing rerun for smoother feel
 
-        else:
-            if st.session_state.figure_response is not None:
+        # --- Display Results in Columns ---
+        if st.session_state.wikimedia_results:
 
-                figure_container.markdown("Figure Recommendations Result:")
-                figure_container.text_area(
-                    label="Figure Recommendations Result:",
-                    value=st.session_state.figure_response,
-                    label_visibility="collapsed",
-                    height=200
+            if st.session_state.selected_wikimedia_image_info is None:
+
+                num_found = len(st.session_state.wikimedia_results)
+                # Title ABOVE the results box
+                img_search_container.markdown(f"**Found {num_found} image(s):** (Select one below)")
+
+                # --- Create a NEW sub-container specifically for the results grid ---
+                results_grid_container = st.container(border=True, height=500)
+                # This provides the border. It will grow vertically with content.
+
+                # --- Place columns and results INSIDE the new sub-container ---
+                with results_grid_container: # Use 'with' block for clarity
+                    num_columns = 3 # Adjust as desired
+                    cols = st.columns(num_columns) # Create columns inside the sub-container
+
+                    for i, img_data in enumerate(st.session_state.wikimedia_results):
+                        col_index = i % num_columns
+                        with cols[col_index]: # Place content in the current column
+                            if img_data.get("thumbnail_url"):
+                                st.image(
+                                    img_data["thumbnail_url"],
+                                    caption=f"{img_data.get('title', 'N/A')} ({img_data.get('license', 'N/A')})",
+                                    width=180 # Adjust width
+                                )
+                                if img_data.get('page_url'):
+                                    st.caption(f"[View on Wikimedia]({img_data['page_url']})")
+
+                                # Selection Button for each image
+                                button_key = f"select_wiki_{img_data.get('id', i)}"
+                                if st.button(f"Select This Image", key=button_key):
+                                    # --- Selection logic (remains the same) ---
+                                    st.session_state.selected_wikimedia_image_info = img_data
+                                    with st.spinner("Preparing selected image..."):
+                                        try:
+                                            headers = {'User-Agent': 'PAIGE/1.0 (Highlight Generator App)'}
+                                            img_response = requests.get(img_data['full_url'], stream=True, timeout=15, headers=headers)
+                                            img_response.raise_for_status()
+                                            img_bytes_io = io.BytesIO(img_response.content)
+                                            st.session_state.photo = img_bytes_io
+                                            st.session_state.photo_link = img_data.get('page_url', '')
+                                            st.session_state.photo_site_name = "Wikimedia Commons"
+                                            st.success(f"Image '{img_data.get('title', 'Selected')}' prepared for Word doc.")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Failed to download/prepare selected image: {e}")
+                                            # Reset relevant states on failure
+                                            st.session_state.photo = None
+                                            st.session_state.photo_link = None
+                                            st.session_state.photo_site_name = None
+                                            st.session_state.selected_wikimedia_image_info = None
+                                    # --- End selection logic ---
+                                # Add separator below button
+                                st.markdown("---")
+
+                            else:
+                                st.caption(f"Thumbnail missing for '{img_data.get('title', 'N/A')}'")
+                                st.markdown("---")
+
+
+        # --- Display Final Selection Info and Download Button ---
+        if st.session_state.selected_wikimedia_image_info:
+            # This section remains unchanged from the previous version
+            img_search_container.markdown("---")
+            img_search_container.markdown("**Selected Image:**")
+            selected_info = st.session_state.selected_wikimedia_image_info
+
+            # Display image thumbnail and details
+            sel_col1, sel_col2 = img_search_container.columns([1, 2])
+            with sel_col1:
+                if selected_info.get("thumbnail_url"):
+                    st.image(selected_info["thumbnail_url"], width=150)
+            with sel_col2:
+                st.markdown(f"**Title:** {selected_info.get('title', 'N/A')}")
+                st.markdown(f"**License:** {selected_info.get('license', 'N/A')}")
+                if selected_info.get('page_url'):
+                    st.markdown(f"**Attribution/Source:** [{selected_info['page_url']}]({selected_info['page_url']})")
+                if selected_info.get('artist'):
+                    st.caption(f"Artist Info: {selected_info['artist']}", unsafe_allow_html=True)
+                st.info("Selected image & attribution link will be used in Word doc export.")
+
+            # CAPTION GENERATION/EDIT SECTION
+            img_search_container.markdown("---") # Separator
+            img_search_container.markdown("**Caption for Selected Image:** (Based on paper summary)")
+            # Using a sub-container for layout clarity, optional
+            caption_editor_container = img_search_container.container()
+
+            # Define parameters for caption generation
+            caption_prompt_name = "figure_caption" # Assumes this prompt summarizes the paper
+            caption_temperature = 0.3              # Adjust temperature if needed
+            caption_max_tokens = 100               # Max tokens for the LLM response
+            caption_box_height = 100               # Height of the text area
+            caption_max_words = 30                 # Target max words (adjust if needed)
+            caption_min_words = 10                 # Target min words
+
+            # Button to generate a caption suggestion
+            if caption_editor_container.button("Suggest Caption", key="gen_wiki_caption"):
+                with st.spinner("Generating caption suggestion..."):
+                    # We use generate_content which handles UI updates within the container
+                    # Base the caption on the *paper's* content, not the image metadata
+                    generated_caption = hlt.generate_content(
+                        client=st.session_state.client,
+                        container=caption_editor_container, # Place result inside this container
+                        content=content_dict["content"],    # Use main paper content as input
+                        prompt_name=caption_prompt_name,
+                        result_title="Suggested Caption (Editable):", # Title for text area
+                        max_tokens=caption_max_tokens,
+                        temperature=caption_temperature,
+                        box_height=caption_box_height,
+                        max_word_count=caption_max_words,
+                        min_word_count=caption_min_words,
+                        max_allowable_tokens=st.session_state.max_allowable_tokens,
+                        model=st.session_state.model,
+                        package=st.session_state.package
+                    )
+                    # Store the generated caption in the correct state variable
+                    st.session_state.image_caption = generated_caption
+                    # Rerun needed to ensure the text_area below picks up the new value if generate_content doesn't update it seamlessly
+                    st.rerun()
+
+            # Display the current caption (if it exists) in an editable text area
+            # This allows viewing generated caption or editing it, or entering one manually
+            current_caption_value = st.session_state.image_caption if st.session_state.image_caption is not None else ""
+            edited_caption = caption_editor_container.text_area(
+                label="Image Caption (Editable):", # Label for screen readers etc.
+                value=current_caption_value,
+                key="edit_image_caption",
+                height=caption_box_height,
+                label_visibility="collapsed", # Hide label as markdown title is present
+                placeholder="Enter caption or generate suggestion..."
+            )
+
+            # Update the session state if the user modifies the text area
+            if edited_caption != current_caption_value:
+                st.session_state.image_caption = edited_caption
+                st.rerun() # Rerun to confirm the change persists visually
+
+
+            # Download Button Logic
+            img_search_container.markdown("**Download Full Resolution Image:**")
+            mime_type = selected_info.get('mime', 'application/octet-stream')
+            extension_map = {
+                'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
+                'image/svg+xml': '.svg', 'image/tiff': '.tif'}
+            file_extension = extension_map.get(mime_type, '.png')
+            base_filename = sanitize_filename(selected_info.get('title', 'wikimedia_image'))
+            download_filename = f"{base_filename}{file_extension}"
+
+            try:
+                # --- Define headers for download ---
+                headers = {'User-Agent': 'PAIGE/1.0 (Highlight Generator App Download)'} # Be descriptive
+                # --- Fetch the image bytes for the download button ---
+                with st.spinner(f"Preparing '{download_filename}'..."):
+                    image_bytes = requests.get(
+                        selected_info['full_url'],
+                        timeout=30,
+                        headers=headers # <-- Add headers argument
+                    ).content
+
+                # Display the download button
+                img_search_container.download_button(
+                label=f"Download {file_extension.upper()[1:]} Image",
+                data=image_bytes,
+                file_name=download_filename,
+                mime=mime_type,
+                key=f"download_{selected_info.get('id', 'selected')}"
                 )
+                img_search_container.caption(f"File: `{download_filename}` ({mime_type})")
+                img_search_container.caption(f"Remember to check attribution requirements at the source link above.")
+
+            except requests.exceptions.RequestException as req_e:
+                img_search_container.error(f"Error downloading image: {req_e}")
+            except Exception as e:
+                img_search_container.error(f"Could not prepare image for download: {e}")
 
 
-        figure_summary_container = st.container()
-        figure_summary_container.markdown(
-            "##### Generate a general figure caption that summarizes the research briefly. This is intended for use with the artisitc photo placed in the Word document."
-        )
-
-        # slider
-        figure_summary_container.markdown("Set desired temperature:")
-        figure_summary_temperature = figure_summary_container.slider(
-            "Figure Caption Temperature",
-            0.0,
-            1.0,
-            0.1,
-            label_visibility="collapsed"
-        )
-
-        # build container content
-        if figure_summary_container.button('Generate Figure Caption'):
-
-            if st.session_state.summary_response is None:
-                st.write("Please generate a general summary first.")
-            else:
-                st.session_state.figure_caption = hlt.generate_content(
-                    client=st.session_state.client,
-                    container=figure_summary_container,
-                    content=st.session_state.summary_response,
-                    prompt_name="figure_caption",
-                    result_title="Figure Caption Result:",
-                    max_tokens=300,
-                    temperature=figure_summary_temperature,
-                    box_height=200,
-                    max_allowable_tokens=st.session_state.max_allowable_tokens,
-                    model=st.session_state.model
-                ).replace('"', "")
-
-        else:
-            if st.session_state.figure_caption is not None:
-                figure_container.markdown("Figure Caption Result:")
-                figure_container.text_area(
-                    label="Figure Caption Result:",
-                    value=st.session_state.figure_caption,
-                    label_visibility="collapsed",
-                    height=200
-                )
+# ------------------------------------------------
+# -- DOC:  START CITATION SELECTION --> 
+# ------------------------------------------------
 
         # citation recommendations section
         citation_container = st.container()
@@ -704,6 +898,10 @@ if st.session_state.access:
                     height=200
                 )
 
+# ------------------------------------------------
+# -- DOC:  START POINT OF CONTACT SECTION --> 
+# ------------------------------------------------
+
         # point of contact box
         poc_container = st.container()
         poc_container.markdown("##### Point of contact for the research by project")
@@ -734,6 +932,10 @@ if st.session_state.access:
             """
         )
 
+# ------------------------------------------------
+# -- DOC:  START EXPORT SECTION --> 
+# ------------------------------------------------
+
         export_container = st.container()
         export_container.markdown("##### Export Word document with new content when ready")
 
@@ -741,33 +943,82 @@ if st.session_state.access:
         word_parameters = {
             'title': st.session_state.title_response,
             'subtitle': st.session_state.subtitle_response,
-            'photo': st.session_state.photo,
+            # Initialize photo parameters - will be overwritten if image selected
+            'photo': None,
             'photo_link': st.session_state.photo_link,
-            'photo_site_name': st.session_state.photo_site_name,
-            'image_caption': st.session_state.figure_caption,
+            'photo_site_name': "Wikimedia Commons",
+            # Check which caption you want here: general artistic one? or figure-specific?
+            'image_caption': st.session_state.image_caption,
             'science': st.session_state.science_response,
             'impact': st.session_state.impact_response,
             'summary': st.session_state.summary_response,
             'funding': st.session_state.funding,
             'citation': st.session_state.citation,
-            'related_links': st.session_state.related_links,
+            'related_links': st.session_state.related_links, # Ensure this state exists if used
             'point_of_contact': st.session_state.point_of_contact,
         }
 
-        # template word document
-        word_template_file = importlib.resources.files('highlight.data').joinpath('highlight_template.docx')
-        template = DocxTemplate(word_template_file)
+        # --- Construct Attribution String and Ensure Correct Link ---
+        if st.session_state.selected_wikimedia_image_info:
+            selected_info = st.session_state.selected_wikimedia_image_info
 
-        template.render(word_parameters)
-        bio = io.BytesIO()
-        template.save(bio)
-        if template:
+            # 1. Construct the full attribution string for 'photo_site_name'
+            artist = selected_info.get('artist_plain', '')
+            license_short = selected_info.get('license', '')
+            license_url = selected_info.get('license_url', None)
+
+            parts = []
+            if artist and artist != "Unknown Artist":
+                parts.append(artist)
+            if license_short:
+                license_part = license_short
+                # Only add URL part if URL exists
+                if license_url:
+                    license_part += f" <{license_url}>"
+                parts.append(license_part)
+            parts.append("via Wikimedia Commons")
+
+            # Assign the constructed string to 'photo_site_name' key
+            word_parameters['photo_site_name'] = ", ".join(filter(None, parts)).replace("<", "(").replace(">", ")")
+
+            # 2. Ensure 'photo_link' has the Wikimedia file page URL (it should already from selection logic)
+            word_parameters['photo_link'] = st.session_state.photo_link # Or selected_info.get('page_url', '')
+
+
+        # --- Load template ---
+        try:
+            word_template_file = importlib.resources.files('highlight.data').joinpath('highlight_template.docx')
+            template = DocxTemplate(word_template_file)
+
+            # --- Process Image for 'photo' placeholder (using InlineImage) ---
+            if isinstance(st.session_state.photo, io.BytesIO) and st.session_state.photo.getbuffer().nbytes > 0:
+                st.session_state.photo.seek(0)
+                image_for_template = InlineImage(template, st.session_state.photo, width=Mm(120)) # Adjust width
+                word_parameters['photo'] = image_for_template
+            else:
+                word_parameters['photo'] = None
+
+            # --- Render the template ---
+            template.render(word_parameters)
+            bio = io.BytesIO()
+            template.save(bio)
+
+            # --- Provide Download Button ---
             export_container.download_button(
                 label="Export Word Document",
                 data=bio.getvalue(),
-                file_name="modified_template.docx",
-                mime="docx"
+                file_name=f"highlight_{st.session_state.output_file or 'output'}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
+
+        # ... (Error handling remains the same) ...
+        except Exception as e:
+            export_container.error(f"Error generating Word document: {e}")
+            export_container.error("Check template placeholders ({{photo}}, {{photo_link}}, {{photo_site_name}}) and image preparation.")
+
+# ------------------------------------------------
+# -- PPT:  START POWER POINT SECTION --> 
+# ------------------------------------------------
 
         # power point slide content
         st.markdown("### Content to fill in PowerPoint template:")
@@ -929,7 +1180,9 @@ if st.session_state.access:
 
 # <-- PPT:  END APPROACH SECTION --
 
-# -- PPT:  START IMPACT SECTION -->
+# ------------------------------------------------
+# -- PPT:  START IMPACT SECTION --> 
+# ------------------------------------------------
 
         # power point impact section
         ppt_impact_container = st.container()

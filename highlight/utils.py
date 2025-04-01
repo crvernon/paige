@@ -1,15 +1,21 @@
+import logging
+from typing import List 
+import re
+
 import tiktoken
 from tqdm import tqdm
 from pypdf import PdfReader
 import streamlit as st
-from typing import List # <--- Added
-
-# --- Pydantic and LangChain Parser Imports ---
 from pydantic import BaseModel, Field
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
+import requests
 
 import highlight.prompts as prompts
+
+
+WIKIMEDIA_API_ENDPOINT = "https://commons.wikimedia.org/w/api.php"
+
 
 # --- Define the Pydantic Model for Approach ---
 class ApproachPoints(BaseModel):
@@ -18,6 +24,85 @@ class ApproachPoints(BaseModel):
 
 class ImpactPoints(BaseModel): # <--- New Model
     points: List[str] = Field(description="List of 3 concise bullet points stating key results/outcomes, highlighting profound or surprising findings.")
+
+
+@st.cache_data(ttl=3600)
+def search_wikimedia_commons(query: str, limit: int = 9):
+    """Searches Wikimedia Commons for images matching the query using the generator."""
+    logging.info(f"Searching Wikimedia Commons for: '{query}' with limit {limit}")
+    params = {
+        "action": "query",
+        "format": "json",
+        "generator": "search",
+        "gsrsearch": query,
+        "gsrnamespace": 6,
+        "gsrlimit": limit,
+        "prop": "imageinfo",
+        "iiprop": "url|extmetadata|size|dimensions|mime", # Keep properties
+        "iimetadataversion": "latest",
+        "iiurlwidth": 200,
+        "formatversion": 2
+    }
+    results = []
+    raw_data = None
+    try:
+        headers = {'User-Agent': 'PAIGE/1.0 (Highlight Generator App)'}
+        response = requests.get(WIKIMEDIA_API_ENDPOINT, params=params, timeout=10, headers=headers)
+        response.raise_for_status()
+        raw_data = response.json()
+        logging.info(f"API Response Status: {response.status_code}")
+
+        if "query" in raw_data and "pages" in raw_data["query"]:
+            pages = raw_data["query"]["pages"]
+            logging.info(f"API returned {len(pages)} pages.")
+            for page_data in pages:
+                if page_data.get("missing", False) or "imageinfo" not in page_data:
+                    continue
+
+                image_info = page_data["imageinfo"][0]
+                metadata = image_info.get("extmetadata", {})
+
+                # Extract details
+                title = page_data.get("title", "Unknown Title")
+                thumbnail_url = image_info.get("thumburl", None)
+                full_url = image_info.get("url", None)
+                description_url = image_info.get("descriptionurl", None) # Link to file page
+                license_short = metadata.get("LicenseShortName", {}).get("value", "") # Default to empty string
+                artist_html = metadata.get("Artist", {}).get("value", "")
+
+                # --- *** Extract License URL *** ---
+                license_url = metadata.get("LicenseUrl", {}).get("value", None) # Get URL if available
+
+                # --- *** Clean Artist HTML to Plain Text *** ---
+                # Remove HTML tags using regex
+                artist_plain = re.sub(r'<.*?>', '', artist_html).strip()
+
+                # Replace potential HTML entities if needed (basic example)
+                artist_plain = artist_plain.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>') # Add more if needed
+                artist_plain_final = artist_plain or "Unknown Artist"
+
+                mime_type = image_info.get("mime", "application/octet-stream")
+
+                if thumbnail_url: # Only proceed if we have a thumbnail
+                    results.append({
+                        "id": page_data.get("pageid"),
+                        "title": title,
+                        "thumbnail_url": thumbnail_url,
+                        "full_url": full_url,
+                        "page_url": description_url,
+                        "license": license_short,
+                        "artist_html": artist_html, # Keep original HTML if needed elsewhere
+                        "artist_plain": artist_plain_final,
+                        "license_url": license_url, # Add license URL
+                        "mime": mime_type,
+                    })
+        return results
+    # (rest of the error handling...)
+    except Exception as e:
+        logging.error(f"Error processing Wikimedia response: {e}", exc_info=True)
+        if raw_data:
+             logging.error(f"Raw data causing error: {raw_data}")
+        return []
 
 
 def get_token_count(text, model="gpt-4o"):
