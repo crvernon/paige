@@ -992,7 +992,7 @@ if st.session_state.access:
 
         # --- Updated Display Logic (Editable Text Area) ---
         if st.session_state.ppt_impact_response is not None:
-            ppt_impact_container.markdown("Impact Points Result (Editable):")
+            ppt_impact_container.markdown("Impact Points Result:")
             response_data = st.session_state.ppt_impact_response # Should be a list
 
             # Prepare string value for the text_area
@@ -1010,7 +1010,7 @@ if st.session_state.access:
 
             # Use st.text_area for display and editing
             edited_text = ppt_impact_container.text_area(
-                label="Impact Points Result (Editable):",
+                label="Impact Points Result:",
                 value=current_text_value,
                 height=250, # Adjust height
                 key="ppt_impact_edit_area", # Unique key
@@ -1024,134 +1024,160 @@ if st.session_state.access:
             ]
             st.session_state.ppt_impact_response = updated_impact_list
 
-
 # <-- PPT:  END IMPACT SECTION --
 
-
+# ------------------------------------------------
+# -- PPT:  START FIGURE SELECTION --> 
+# ------------------------------------------------
         # --- New Figure Selection and Caption Section ---
         st.markdown("##### Select Figure and Generate Caption for PowerPoint:")
         figure_select_container = st.container(border=True) # Use border for visual grouping
-
-        figure_select_container.markdown("##### 1. Extract Figure/Table List from Paper")
-        if figure_select_container.button("List Figures/Tables"):
-            with st.spinner("Extracting figure list from paper..."):
+        # --- 1. Button to List Figures ---
+        figure_select_container.markdown("##### 1. Extract Figure List with Descriptions")
+        if figure_select_container.button("List Figures with Descriptions"): # Renamed button slightly
+            with st.spinner("Extracting figure list and descriptions from paper..."):
                 try:
-                    # Use the lower-level generate_prompt function to get the raw list
-                    figure_list_raw = hlt.generate_prompt(
-                        client=st.session_state.client,
+                    # Step 1: Format the user prompt string using the simpler generate_prompt
+                    user_prompt_for_figlist = hlt.generate_prompt(
                         content=content_dict["content"],
-                        prompt_name="figure_list",
-                        max_tokens=500, # Adjust as needed
-                        temperature=0.0, # Low temp for extraction
+                        prompt_name="figure_list"
+                    )
+
+                    # Step 2: Call the LLM with the formatted prompt using generate_prompt_content
+                    figure_list_raw = hlt.generate_prompt_content(
+                        client=st.session_state.client,
+                        system_scope=prompts.SYSTEM_SCOPE,
+                        prompt=user_prompt_for_figlist,
+                        max_tokens=1000, # Adjust as needed
+                        temperature=0.1, # Low temp for extraction consistency
                         max_allowable_tokens=st.session_state.max_allowable_tokens,
                         model=st.session_state.model,
                         package=st.session_state.package
                     )
 
-                    
+                    # --- Parsing Logic ---
                     parsed_figures = {}
                     lines = figure_list_raw.strip().split('\n')
                     for line in lines:
-                        # Primary Filter: Skip line if it seems to be a table reference
+                        # Filter out tables explicitly
                         if line.strip().lower().startswith("table"):
-                            continue # Skip this line entirely
-
+                            continue
                         if ' :: ' in line:
                             parts = line.split(' :: ', 1)
                             identifier = parts[0].strip()
                             description = parts[1].strip()
-
-                            # Secondary Filter: Double-check identifier doesn't start with "Table"
+                            # Double-check identifier isn't a table
                             if identifier and description and not identifier.lower().startswith("table"):
                                 parsed_figures[identifier] = description
-                            # else: # Optional logging for filtered items
-                                # print(f"Filtered out potential table: {identifier}")
 
                     st.session_state.figure_data = parsed_figures
-                    st.session_state.selected_figure_id = None # Reset selection
+                    st.session_state.selected_figure_id = None # Reset selection on new list generation
                     st.session_state.selected_figure_caption = None # Reset caption
 
                     if not st.session_state.figure_data:
-                        # Updated message
-                        figure_select_container.warning("Could not extract any figure identifiers with descriptions. Ensure figures are clearly captioned in the PDF.")
+                        figure_select_container.warning("Could not extract any figure identifiers with descriptions. Check paper format.")
                     else:
-                        # Updated message
                         figure_select_container.success(f"Found {len(st.session_state.figure_data)} figures with descriptions.")
 
                 except Exception as e:
                     figure_select_container.error(f"Error extracting figure list: {e}")
-                    st.session_state.figure_data = None
+                    st.session_state.figure_data = None # Reset on error
 
 
-        if st.session_state.figure_list:
-            figure_select_container.markdown("##### 2. Select Figure/Table")
-            # Add a 'None' option to allow deselection or represent initial state
-            options = ["<Select a Figure/Table>"] + st.session_state.figure_list
-            selected = figure_select_container.selectbox(
-                "Choose the figure or table you want to use:",
-                options=options,
-                index=options.index(st.session_state.selected_figure) if st.session_state.selected_figure in options else 0,
+        # --- 2. Display Selection Dropdown ---
+        if st.session_state.figure_data:
+            figure_select_container.markdown("##### 2. Select Figure")
+
+            # Create display options and map back to ID
+            display_options = ["<Select a Figure>"] + [f"{id}: {desc}" for id, desc in st.session_state.figure_data.items()]
+            id_lookup = {f"{id}: {desc}": id for id, desc in st.session_state.figure_data.items()}
+
+            # Determine current selection's display string for the dropdown default index
+            current_display_selection = "<Select a Figure>"
+            if st.session_state.selected_figure_id and st.session_state.selected_figure_id in st.session_state.figure_data:
+                current_display_selection = f"{st.session_state.selected_figure_id}: {st.session_state.figure_data[st.session_state.selected_figure_id]}"
+
+            selected_display_string = figure_select_container.selectbox(
+                "Choose the figure you want to use:",
+                options=display_options,
+                index=display_options.index(current_display_selection) if current_display_selection in display_options else 0,
                 label_visibility="collapsed"
             )
 
-            # Update session state only if a valid selection is made
-            if selected != "<Select a Figure/Table>":
-                if st.session_state.selected_figure != selected:
-                    st.session_state.selected_figure = selected
-                    st.session_state.selected_figure_caption = None # Reset caption when selection changes
-            else:
-                 st.session_state.selected_figure = None # Set back to None if placeholder is chosen
+            # Update session state with the actual ID based on the selection
+            new_selected_id = id_lookup.get(selected_display_string, None)
+            if st.session_state.selected_figure_id != new_selected_id:
+                st.session_state.selected_figure_id = new_selected_id
+                st.session_state.selected_figure_caption = None # Reset caption when selection changes
 
 
-        if st.session_state.selected_figure:
-            figure_select_container.markdown(f"##### 3. Generate Caption for {st.session_state.selected_figure}")
+        # --- 3. Generate Caption for Selected Figure ---
+        if st.session_state.selected_figure_id: # Check if a valid Figure ID is selected
+            selected_id = st.session_state.selected_figure_id
+            figure_select_container.markdown(f"##### 3. Generate Caption for {selected_id}")
 
             # Caption Temperature Slider
             figure_select_container.markdown("Set desired temperature for caption generation:")
             caption_temperature = figure_select_container.slider(
-                "Selected Figure Caption Temperature",
-                0.0, 1.0, 0.2, # Default to slightly creative but mostly factual
+                "Selected Figure Caption Temperature", 0.0, 1.0, 0.2, # Default temp
                 key="selected_fig_caption_temp", # Unique key
                 label_visibility="collapsed"
             )
 
-            if figure_select_container.button(f"Generate Caption for {st.session_state.selected_figure}"):
-                 with st.spinner(f"Generating caption for {st.session_state.selected_figure}..."):
+            # --- CORRECTED Button Handler for Caption Generation ---
+            if figure_select_container.button(f"Generate Caption for {selected_id}"):
+                with st.spinner(f"Generating caption for {selected_id}..."):
                     try:
-                        # Use generate_prompt again for the caption
-                         caption_response = hlt.generate_prompt(
-                            client=st.session_state.client,
-                            content=content_dict["content"],
+                        # Step 1: Format the user prompt string for the caption
+                        user_prompt_caption = hlt.generate_prompt(
+                            content=content_dict["content"], # Main paper content
                             prompt_name="selected_figure_caption",
-                            additional_content=st.session_state.selected_figure, # Pass the selected figure ID
-                            max_tokens=150, # ~50 words + buffer
-                            temperature=caption_temperature,
+                            additional_content=selected_id # Pass the selected figure ID
+                        )
+
+                        # Step 2: Call the LLM execution function to get the caption
+                        caption_response = hlt.generate_prompt_content(
+                            client=st.session_state.client,
+                            system_scope=prompts.SYSTEM_SCOPE,
+                            prompt=user_prompt_caption, # Pass the formatted caption prompt
+                            max_tokens=150, # Adjust max tokens for caption length
+                            temperature=caption_temperature, # Use slider value
                             max_allowable_tokens=st.session_state.max_allowable_tokens,
                             model=st.session_state.model,
                             package=st.session_state.package
-                         )
-                         st.session_state.selected_figure_caption = caption_response.strip()
-                         figure_select_container.success("Caption generated!")
+                        )
+
+                        # Store the generated caption
+                        st.session_state.selected_figure_caption = caption_response.strip()
+                        figure_select_container.success("Caption generated!")
+
                     except Exception as e:
-                         figure_select_container.error(f"Error generating caption: {e}")
-                         st.session_state.selected_figure_caption = None
-
-        # Display the generated caption if available
-        if st.session_state.selected_figure_caption:
-             figure_select_container.markdown("##### Generated Caption:")
-             figure_select_container.text_area(
-                 label="Generated Caption Result:",
-                 value=st.session_state.selected_figure_caption,
-                 height=100,
-                 key="selected_fig_caption_display",
-                 label_visibility="collapsed"
-             )
-        elif st.session_state.selected_figure:
-            # Show if figure selected but caption not generated yet
-             figure_select_container.info("Click the button above to generate the caption.")
+                        figure_select_container.error(f"Error generating caption: {e}")
+                        st.session_state.selected_figure_caption = None # Reset on error
 
 
+        # --- 4. Display Generated Caption (Read-only in this version) ---
+        # Note: Making this editable would require parsing edits back, less common for captions.
+        if st.session_state.selected_figure_caption is not None: # Check if caption exists
+            figure_select_container.markdown("##### Generated Caption:")
+            figure_select_container.text_area(
+                label="Generated Caption Result:", # Label for accessibility
+                value=st.session_state.selected_figure_caption,
+                height=100,
+                key="selected_fig_caption_display",
+                label_visibility="collapsed",
+                disabled=False # Display as read-only
+            )
+        elif st.session_state.selected_figure_id:
+            # Show message if figure selected but caption not generated yet
+            figure_select_container.info("Click the button above to generate the caption for the selected figure.")
+
+
+# <-- PPT:  END FIGURE SELECTION --
+
+# ------------------------------------------------
 # -- PPT:  START EXPORT -->
+# ------------------------------------------------
 
         # Add PowerPoint export container at the end
         export_ppt_container = st.container()

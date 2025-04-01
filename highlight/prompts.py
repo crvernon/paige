@@ -240,7 +240,7 @@ prompt_queue = {
     Figure 1 :: Model simulation results under baseline conditions.
     Figure 2a :: Comparison of observed vs. simulated streamflow.
     Figure 2b :: Spatial map of precipitation anomalies.
-    Fig. 3 :: Sensitivity analysis of parameter X.
+    Figure 3 :: Sensitivity analysis of parameter X.
 
     TEXT:
     ```{0}```
