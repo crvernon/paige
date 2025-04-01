@@ -156,44 +156,31 @@ prompt_queue = {
     ```{2}```
     """,
 
-    "approach": """Clearly and concisely state in 2-3 short points how this work accomplished the stated objective from a methodolgocial perspecive. 
-    - Do not restate the objective or include results.
-    - Only include methodology including but not limited to: statistical, technological, and theory based approaches. 
-    - Here is the objective statement: {1} 
-    - Use a different action verb to start sentences than what is used to begin the objective statement.
-    - Use active verbs for the start of each point.  
+    "approach": """Clearly and concisely state in 2-3 short points how this work accomplished the stated objective from a methodolgocial perspecive.
+    - The objective statement is: {1}
+    - Base the points on the main text provided below delimited by triple backticks.
+    - Do not restate the objective or include results in the points.
+    - Only include methodology including but not limited to: statistical, technological, and theory based approaches.
+    - Use a different action verb to start each point than what is used to begin the objective statement.
+    - Use active verbs for the start of each point.
     - Use present tense.
-    - Format the results as a hyphen-separated list.
-    - The response must be in a hyphen-separated list.
-  
-    # Example response for the purposes of formatting
-    RESPONSE:
-    - Evaluate contemporary and hypothesized Western U.S. infrastructures with variable renewable generation shares for sensitivity to drought and Southern California heat wave scenarios on generation and load.
-    - Use a stochastic temperature simulation combined with spatially resolved historical drought as a toolset to incorporate other grid stressors in high-resolution power system models, leading to improved sensitivity analyses not limited by the current ability of climate models to capture extreme conditions.
-    
-    # Input to process
-    TEXT: {0}
-    RESPONSE:
+    - Ensure the points directly relate to achieving the stated objective.
+
+    ```
+    {0}
+    ```
     """,
 
-    "ppt_impact": """Clearly and concisely state in 3 bullet points the key results and outcomes from this research. 
+     "ppt_impact": """Clearly and concisely state in 3 bullet points the key results and outcomes from this research based on the text delimited by triple backticks.
     - State what the results indicate.
     - Include results that may be considered profound or surprising.
     - Each point should be 1 concise sentence.
     - Use present tense.
-    - Format the results as a hyphen-separated list.
-    - The response must be in a hyphen-separated list.
     - Do not start sentences with 'The'.
 
-    # Example response for the purposes of formatting
-    RESPONSE:
-    - Incorporation of adaptive farmer agents in a large-scale hydrological model reduces US-wide annual water shortages by up to 42%.
-    - Farmer adaptation primarily occurs through the contraction of irrigated crop areas, with crop switching playing a secondary role.
-    - Sensitivity analysis shows that the impact of farmer adaptation on water shortage outcomes is robust across different assumptions of agent memory.
-
-    # Input to process
-    TEXT: {0}
-    RESPONSE:
+    ```
+    {0}
+    ```
     """,
 
     "reduce_wordcount": """Reduce the current text to be greater than {0} words and less than or equal to {1} words.  \

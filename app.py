@@ -12,8 +12,9 @@ import streamlit as st
 # from openai import OpenAI
 from langchain_openai import AzureChatOpenAI, OpenAI
 
-
 import highlight as hlt
+from highlight.utils import ApproachPoints, PydanticOutputParser, ImpactPoints
+import highlight.prompts as prompts
 
 
 if "reduce_document" not in st.session_state:
@@ -820,6 +821,7 @@ if st.session_state.access:
                     height=250
                 )
 
+# -- PPT:  START APPROACH SECTION -->
         # approach section
         approach_container = st.container()
         approach_container.markdown("##### Generate approach summary from text content")
@@ -846,29 +848,88 @@ if st.session_state.access:
 
         # build container content
         if approach_container.button('Generate Approach'):
-            st.session_state.approach_response = hlt.generate_content(
-                client=st.session_state.client,
-                container=approach_container,
-                content=content_dict["content"],
-                prompt_name="approach",
-                result_title="Approach Result:",
-                max_tokens=300,
-                temperature=approach_temperature,
-                box_height=250,
-                additional_content=st.session_state.objective_response,
-                max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
+            if st.session_state.objective_response is None:
+                approach_container.warning("Please generate the Objective first.")
+            else:
+                with st.spinner("Generating approach points..."):
+                    try:
+                        # 1. Get the user prompt string
+                        user_prompt_for_approach = hlt.generate_prompt(
+                            content=content_dict["content"],
+                            prompt_name="approach",
+                            additional_content=st.session_state.objective_response
+                        )
+
+                        # 2. Instantiate the parser
+                        parser = PydanticOutputParser(pydantic_object=ApproachPoints)
+
+                        # 3. Call the structured generation function
+                        structured_result = hlt.generate_structured_content(
+                            client=st.session_state.client,
+                            system_scope=prompts.SYSTEM_SCOPE,
+                            user_prompt=user_prompt_for_approach,
+                            pydantic_parser=parser,
+                            max_tokens=300, # Adjust as needed
+                            temperature=approach_temperature,
+                            max_allowable_tokens=st.session_state.max_allowable_tokens,
+                            model=st.session_state.model,
+                            package=st.session_state.package
+                        )
+
+                        # 4. Store the list of points
+                        st.session_state.approach_response = structured_result.points
+                        # approach_container.success("Approach points generated!")
+
+                    except Exception as e:
+                        st.session_state.approach_response = None
+                        # approach_container.error(f"Failed to generate approach: {e}")
+
+         # Display the approach points in an editable text box
+        if st.session_state.approach_response is not None: # Check if it exists (could be an empty list)
+            approach_container.markdown("Approach Result:")
+            response_data = st.session_state.approach_response # Should be a list of strings
+
+            # --- Prepare string value for the text_area ---
+            if isinstance(response_data, list):
+                # Format the list into a multi-line string with bullets
+                # Ensure points don't already start with '-' before adding one
+                # Include only non-empty points
+                current_text_value = "\n".join([
+                    f"{str(point).strip()}" if str(point).strip().startswith("-") else f"- {str(point).strip()}"
+                    for point in response_data if str(point).strip()
+                ])
+            elif isinstance(response_data, str):
+                # Fallback if it somehow received a string (shouldn't happen ideally)
+                current_text_value = response_data
+                # approach_container.warning("Approach data was a string, expected a list. Displaying as is.")
+            else:
+                # Handle unexpected types
+                approach_container.error(f"Cannot display approach result: Unexpected data type {type(response_data)}")
+                current_text_value = "" # Default to empty
+
+            # --- Use st.text_area for display and editing ---
+            edited_text = approach_container.text_area(
+                label="Approach Result (Editable):", # Label for accessibility
+                value=current_text_value,
+                height=250, # Adjust height as needed
+                key="approach_edit_area", # Add a unique key
+                label_visibility="collapsed" # Hide label visually
             )
 
-        else:
-            if st.session_state.approach_response is not None:
-                approach_container.markdown("Approach Result:")
-                approach_container.text_area(
-                    label="Approach Result:",
-                    value=st.session_state.approach_response,
-                    label_visibility="collapsed",
-                    height=250
-                )
+            # --- Update session state with the potentially edited content ---
+            # Parse the edited text FROM the text area back into a LIST
+            updated_approach_list = [
+                line.strip().lstrip('- ') # Remove leading bullet and space
+                for line in edited_text.split('\n') if line.strip() # Split lines, ignore empty
+            ]
+
+            # Store the updated list back into session state
+            # This ensures consistency for PowerPoint generation etc.
+            st.session_state.approach_response = updated_approach_list
+
+# <-- PPT:  END APPROACH SECTION --
+
+# -- PPT:  START IMPACT SECTION -->
 
         # power point impact section
         ppt_impact_container = st.container()
@@ -894,32 +955,78 @@ if st.session_state.access:
             label_visibility="collapsed"
         )
 
-        # build container content
         if ppt_impact_container.button('Generate Impact Points'):
-            st.session_state.ppt_impact_response = hlt.generate_content(
-                client=st.session_state.client,
-                container=ppt_impact_container,
-                content=content_dict["content"],
-                prompt_name="ppt_impact",
-                result_title="Impact Points Result:",
-                max_tokens=300,
-                temperature=ppt_impact_temperature,
-                box_height=250,
-                max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
+            with st.spinner("Generating impact points..."):
+                try:
+                    # 1. Get the user prompt string
+                    user_prompt_for_impact = hlt.generate_prompt(
+                        content=content_dict["content"],
+                        prompt_name="ppt_impact"
+                        # No additional_content needed for ppt_impact
+                    )
+
+                    # 2. Instantiate the parser with the new model
+                    parser = PydanticOutputParser(pydantic_object=ImpactPoints)
+
+                    # 3. Call the structured generation function
+                    structured_result = hlt.generate_structured_content(
+                        client=st.session_state.client,
+                        system_scope=prompts.SYSTEM_SCOPE,
+                        user_prompt=user_prompt_for_impact,
+                        pydantic_parser=parser,
+                        max_tokens=300, # Adjust as needed
+                        temperature=ppt_impact_temperature,
+                        max_allowable_tokens=st.session_state.max_allowable_tokens,
+                        model=st.session_state.model,
+                        package=st.session_state.package
+                    )
+
+                    # 4. Store the list of points
+                    st.session_state.ppt_impact_response = structured_result.points
+                    # ppt_impact_container.success("Impact points generated!")
+
+                except Exception as e:
+                    st.session_state.ppt_impact_response = None
+                    # ppt_impact_container.error(f"Failed to generate impact points: {e}")
+
+
+        # --- Updated Display Logic (Editable Text Area) ---
+        if st.session_state.ppt_impact_response is not None:
+            ppt_impact_container.markdown("Impact Points Result (Editable):")
+            response_data = st.session_state.ppt_impact_response # Should be a list
+
+            # Prepare string value for the text_area
+            if isinstance(response_data, list):
+                current_text_value = "\n".join([
+                    f"{str(point).strip()}" if str(point).strip().startswith("-") else f"- {str(point).strip()}"
+                    for point in response_data if str(point).strip()
+                ])
+            elif isinstance(response_data, str): # Fallback
+                current_text_value = response_data
+                # ppt_impact_container.warning("Impact data was a string, expected a list.")
+            else: # Handle unexpected
+                ppt_impact_container.error(f"Cannot display impact result: Unexpected data type {type(response_data)}")
+                current_text_value = ""
+
+            # Use st.text_area for display and editing
+            edited_text = ppt_impact_container.text_area(
+                label="Impact Points Result (Editable):",
+                value=current_text_value,
+                height=250, # Adjust height
+                key="ppt_impact_edit_area", # Unique key
+                label_visibility="collapsed"
             )
 
-        else:
-            if st.session_state.ppt_impact_response is not None:
-                ppt_impact_container.markdown("Impact Points Result:")
-                ppt_impact_container.text_area(
-                    label="Impact Points Result:",
-                    value=st.session_state.ppt_impact_response,
-                    label_visibility="collapsed",
-                    height=250
-                )
+            # Parse the edited text back into a LIST and update session state
+            updated_impact_list = [
+                line.strip().lstrip('- ')
+                for line in edited_text.split('\n') if line.strip()
+            ]
+            st.session_state.ppt_impact_response = updated_impact_list
 
-###  NEW SECTION --
+
+# <-- PPT:  END IMPACT SECTION --
+
 
         # --- New Figure Selection and Caption Section ---
         st.markdown("##### Select Figure and Generate Caption for PowerPoint:")
@@ -1043,7 +1150,8 @@ if st.session_state.access:
             # Show if figure selected but caption not generated yet
              figure_select_container.info("Click the button above to generate the caption.")
 
-### END NEW SECTION ---
+
+# -- PPT:  START EXPORT -->
 
         # Add PowerPoint export container at the end
         export_ppt_container = st.container()
@@ -1059,9 +1167,23 @@ if st.session_state.access:
                 ppt_template_file = importlib.resources.files('highlight.data').joinpath('highlight_template.pptx')
                 prs = Presentation(ppt_template_file)
 
-                # Split the impact and approach responses into bullet points (assuming they are separated by newlines)
-                impact_points = st.session_state.ppt_impact_response.split("\n")
-                approach_points = st.session_state.approach_response.split("\n")
+                # --- Use the approach list directly ---
+                # Ensure approach_response is actually a list
+                approach_points = []
+                if isinstance(st.session_state.approach_response, list):
+                    approach_points = st.session_state.approach_response
+                elif st.session_state.approach_response: # Handle case if it's still a string somehow?
+                     approach_points = st.session_state.approach_response.split('\n') # Fallback
+                else:
+                    approach_points = ["Approach not generated."] # Default if missing
+
+                impact_points = [] # Define impact_points similarly
+                if isinstance(st.session_state.ppt_impact_response, list): # Assuming ppt_impact is also structured
+                    impact_points = st.session_state.ppt_impact_response
+                elif st.session_state.ppt_impact_response:
+                    impact_points = st.session_state.ppt_impact_response.split('\n')
+                else:
+                    impact_points = ["Impact points not generated."]
 
                 # Iterate over all slides to find the text boxes labeled "impact_0", "impact_1", "impact_2"
                 for slide in prs.slides:
@@ -1116,29 +1238,26 @@ if st.session_state.access:
 
                             # Handle approach bullet points
                             if "approach_0" in shape.text_frame.text:
-                                # Clear existing paragraphs in the text frame
                                 shape.text_frame.clear()
-
-                                # Add bullet points for approach
-                                for i, approach_point in enumerate(approach_points[:3]):  # Only take the first 3 approach points
+                                # Use the list directly
+                                for i, approach_point in enumerate(approach_points[:3]): # Limit to 3 points
                                     p = shape.text_frame.add_paragraph()
-                                    p.text = approach_point
-                                    p.level = 0  # This sets it as a bullet point
-                                    p.font.size = Pt(13)  # Adjust bullet point font size
-                                    p.alignment = PP_ALIGN.LEFT  # Align bullet points
+                                    # Remove leading hyphens if they exist before adding to PPT
+                                    p.text = approach_point.strip().lstrip('- ')
+                                    p.level = 0
+                                    p.font.size = Pt(13)
+                                    p.alignment = PP_ALIGN.LEFT
 
-                            # Handle the impact bullet points in the same text box
+                            # Handle the impact bullet points
+                            # (Consider making ppt_impact structured too for consistency)
                             if "impact_0" in shape.text_frame.text:
-                                # Clear the existing paragraphs
                                 shape.text_frame.clear()
-
-                                # Add bullet points for impact
-                                for i, impact_point in enumerate(impact_points[:3]):  # Only take the first 3 impact points
+                                for i, impact_point in enumerate(impact_points[:3]): # Limit to 3
                                     p = shape.text_frame.add_paragraph()
-                                    p.text = impact_point
-                                    p.level = 0  # This sets it as a bullet point
-                                    p.font.size = Pt(13)  # Adjust bullet point font size
-                                    p.alignment = PP_ALIGN.LEFT  # Align bullet points
+                                    p.text = impact_point.strip().lstrip('- ')
+                                    p.level = 0
+                                    p.font.size = Pt(13)
+                                    p.alignment = PP_ALIGN.LEFT
 
                 # Save the modified presentation to a BytesIO object
                 ppt_io = io.BytesIO()
