@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from langchain.output_parsers import PydanticOutputParser
 from langchain_core.prompts import PromptTemplate
 import requests
-import fitz
 
 import highlight.prompts as prompts
 
