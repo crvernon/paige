@@ -379,7 +379,7 @@ if st.session_state.access:
                 result_title="Title Result:",
                 max_tokens=50,
                 temperature=title_temperature,
-                box_height=50,
+                box_height=75,
                 max_allowable_tokens=st.session_state.max_allowable_tokens,
                 model=st.session_state.model
             )
@@ -438,7 +438,7 @@ if st.session_state.access:
                     result_title="Subtitle Result:",
                     max_tokens=100,
                     temperature=subtitle_temperature,
-                    box_height=50,
+                    box_height=75,
                     additional_content=st.session_state.title_response,
                     max_word_count=100,
                     min_word_count=75,
