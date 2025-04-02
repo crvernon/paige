@@ -651,6 +651,40 @@ if st.session_state.access:
                 )
 
 # ------------------------------------------------
+# -- DOC:  START CITATION SELECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")  
+
+        # citation recommendations section
+        citation_container = st.container()
+        citation_container.markdown("##### Citation for the paper in Chicago style")
+        citation_container.markdown("This will only use what is represented in the publication provided.")
+
+        if citation_container.button('Generate Citation'):
+            st.session_state.citation = hlt.generate_content(
+                client=st.session_state.client,
+                container=citation_container,
+                content=content_dict["content"],
+                prompt_name="citation",
+                result_title="",
+                max_tokens=300,
+                temperature=0.0,
+                box_height=200,
+                max_allowable_tokens=st.session_state.max_allowable_tokens,
+                model=st.session_state.model
+            ).replace('"', "")
+
+        else:
+            if st.session_state.citation is not None:
+                citation_container.text_area(
+                    label="Citation",
+                    value=st.session_state.citation,
+                    label_visibility="collapsed",
+                    height=200
+                )
+
+# ------------------------------------------------
 # -- DOC:  START PHOTO SELECTION --> 
 # ------------------------------------------------
 
@@ -961,41 +995,6 @@ if st.session_state.access:
                 img_search_container.error(f"Error downloading image: {req_e}")
             except Exception as e:
                 img_search_container.error(f"Could not prepare image for download: {e}")
-
-
-# ------------------------------------------------
-# -- DOC:  START CITATION SELECTION --> 
-# ------------------------------------------------
-
-        st.markdown("---")  
-
-        # citation recommendations section
-        citation_container = st.container()
-        citation_container.markdown("##### Citation for the paper in Chicago style")
-        citation_container.markdown("This will only use what is represented in the publication provided.")
-
-        if citation_container.button('Generate Citation'):
-            st.session_state.citation = hlt.generate_content(
-                client=st.session_state.client,
-                container=citation_container,
-                content=content_dict["content"],
-                prompt_name="citation",
-                result_title="",
-                max_tokens=300,
-                temperature=0.0,
-                box_height=200,
-                max_allowable_tokens=st.session_state.max_allowable_tokens,
-                model=st.session_state.model
-            ).replace('"', "")
-
-        else:
-            if st.session_state.citation is not None:
-                citation_container.text_area(
-                    label="Citation",
-                    value=st.session_state.citation,
-                    label_visibility="collapsed",
-                    height=200
-                )
 
 # ------------------------------------------------
 # -- DOC:  START FUNDING SECTION --> 
