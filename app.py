@@ -391,7 +391,7 @@ if st.session_state.access:
                     label="Title Result:",
                     value=st.session_state.title_response,
                     label_visibility="collapsed",
-                    height=50
+                    height=75
                 )
 
 # ------------------------------------------------
@@ -453,7 +453,7 @@ if st.session_state.access:
                     label="Subtitle Result:",
                     value=st.session_state.subtitle_response,
                     label_visibility="collapsed",
-                    height=50
+                    height=75
                 )
 
 # ------------------------------------------------
