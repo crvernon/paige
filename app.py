@@ -172,7 +172,7 @@ if "selected_figure" not in st.session_state:
     st.session_state.selected_figure = None # Will hold the user's choice, e.g., 'Figure 1'
 
 if "selected_figure_caption" not in st.session_state:
-    st.session_state.selected_figure_caption = None # Will hold the generated caption for the selected figure
+    st.session_state.selected_figure_caption = "" # Will hold the generated caption for the selected figure
 
 if "wikimedia_query" not in st.session_state:
     st.session_state.wikimedia_query = ""
@@ -198,6 +198,13 @@ if "ppt_figure_image_bytes" not in st.session_state:
     # Holds the raw bytes of the image chosen via "Assign Image" button
     st.session_state.ppt_figure_image_bytes = None
 
+if "suggested_search_strings" not in st.session_state:
+    st.session_state.suggested_search_strings = None
+
+# ------------------------------------------------
+# -- BEGIN INTERFACE --> 
+# ------------------------------------------------
+
 # Force responsive layout for columns also on mobile
 st.write(
     """<style>
@@ -214,7 +221,7 @@ st.markdown(
     """<h1 style='text-align: center;'>
         <span style='font-size:40px;'>&#128220;</span>  PAIGE  <span style='font-size:40px;'>&#128220;</span>
     </h1>
-    <h3 style='text-align: center;'>The Pnnl AI assistant for GEnerating highlights</h3>
+    <h3 style='text-align: center;'>The Pnnl AI assistant for GEnerating publication highlights</h3>
     <h5 style='text-align: center;'>Go from publication to a first draft highlight <i>fast</i>!</h5>
     """,
      unsafe_allow_html=True
@@ -223,12 +230,12 @@ st.markdown(
 with st.expander("**How to Use PAIGE**", expanded=False):
     st.markdown((
         "Simply: \n" + 
-        "1. Enter in your OpenAI API key or project password \n"
+        "1. Enter in your project password or OpenAI API key \n"
         "2. Load the PDF document of your publication into the app \n" +  
         "3. Generate each part of your document in order \n" + 
         "4. Export the document to your local machine \n" + 
         "5. Repeat to generate the PowerPoint slide as well \n" + 
-        "\n :memo: Note: Some parts of this process were left to be manual. " + 
+        "\n :memo: Note: Some parts of this process were left to be semi-automated. " + 
         "These include finding images that are free and open to use from a reliable " + 
         "source and choosing which figure from the paper to use in the PowerPoint slide. " + 
         "But don't worry, PAIGE offers helpers along the way."
@@ -240,7 +247,7 @@ if st.session_state.model in (["gpt-4o"]):
 # validate project and access key
 if st.session_state.access is False:
     user_input = st.text_input(
-        "Enter your API key or project password:", 
+        "Enter your project password or API key:", 
         type="password",
     )
 
@@ -650,30 +657,91 @@ if st.session_state.access:
         st.markdown("---") 
 
         st.markdown("##### Find an Image for your Word Document")
+        st.markdown("**Note**:  This is not an image from your paper.  It is meant to be an editorial cover image.")
         st.markdown(
-            "This is a convenience service and uses Wikimedia Commons due to their images being fully open and reusable.  " + 
+            "The following is a convenience service and uses Wikimedia Commons due to their images being fully open and reusable.  " + 
             "That being stated, you may not always be able to find what you need in their database and may have to " + 
             "search another resource.  Simply do not execute this block if you intend to find an image elsewhere."
         )
         # --- Main Container for this Section ---
         img_search_container = st.container(border=True)
 
-        img_search_container.write("##### 1. Find an image")
+        # Step 1 - Suggest Search Strings
+        img_search_container.markdown("##### 1. Generate Suggested Wikimedia Search Strings (Optional)")
+        img_search_container.caption(
+            "These are produced from the 'General Summary' generated earlier.  " + 
+            "Simple searches are more productive, so use these as general guidance.  " + 
+            "\n\n**For example**, simply searching for 'Groundwater irrigation' will work better than " + 
+            "'Groundwater irrigation in the Snake River Basin'."
+        )
+
+        suggest_container = img_search_container.container() # Sub-container for this step
+
+        # Check if summary exists first
+        if st.session_state.summary_response:
+            if suggest_container.button("Suggest Search Strings", key="suggest_wiki_search"):
+                with st.spinner("Generating search string ideas..."):
+                    # Call generate_content for suggestions
+                    # Assuming 'figure' prompt takes summary and returns newline-separated strings
+                    suggestions = hlt.generate_content(
+                        client=st.session_state.client,
+                        container=suggest_container, # Display result within this container
+                        content=st.session_state.summary_response, # Input is the summary
+                        prompt_name="figure", # Use the prompt for generating search strings
+                        result_title="Suggested Strings:",
+                        max_tokens=200, # Adjust as needed
+                        temperature=0.5, # Moderate temperature for suggestions
+                        box_height=150, # Text area height
+                        # Assuming generate_content displays result in text_area, no max/min words needed here
+                        max_allowable_tokens=st.session_state.max_allowable_tokens,
+                        model=st.session_state.model,
+                        package=st.session_state.package
+                    )
+                    # Store the raw response (might be newline separated string)
+                    st.session_state.suggested_search_strings = suggestions
+                    # Rerun not strictly necessary as generate_content handles display,
+                    # but needed if default query logic below should immediately update
+                    st.rerun()
+
+            # Display existing suggestions if already generated
+            elif st.session_state.suggested_search_strings:
+                suggest_container.markdown("**Suggested Strings:**")
+                suggest_container.text_area(
+                    label="Suggested Strings", # Hidden label
+                    value=st.session_state.suggested_search_strings.replace('"', ''),
+                    height=150,
+                    disabled=False,
+                    label_visibility="collapsed"
+                )
+
+        else:
+            suggest_container.warning("Please generate the 'General Summary' in Section 1 first to enable suggestions.")
+
+
+        img_search_container.markdown("---") # Separator
+
+        # --- Step 2: Search and Select Image (Previously Step 1) ---
+        img_search_container.markdown("##### 2. Search Wikimedia Commons and Select Image")
 
         # --- Determine Default Query ---
         default_query = ""
-        if st.session_state.title_response:
+        # PRIORITIZE first suggested string if available
+        if st.session_state.suggested_search_strings:
+            first_suggestion = st.session_state.suggested_search_strings.split('\n')[0].strip()
+            if first_suggestion:
+                default_query = first_suggestion
+        # Fallback to title or summary
+        elif st.session_state.title_response:
             default_query = st.session_state.title_response
         elif st.session_state.summary_response:
             default_query = " ".join(st.session_state.summary_response.split()[:15])
 
-        # --- Search Controls Row ---
-        controls_cols = img_search_container.columns([3, 1, 1]) # Query | Limit | Search Button
-
+        # --- Search Controls Row (No change needed here) ---
+        controls_cols = img_search_container.columns([3, 1, 1])
         with controls_cols[0]: # Search Query Input
             user_query = st.text_input(
                 "Image Search Query:",
-                value=st.session_state.get("wikimedia_query", default_query),
+                value=st.session_state.get("wikimedia_query", default_query), # Use default logic
                 key="wikimedia_query_input"
             )
             st.session_state.wikimedia_query = user_query
@@ -727,7 +795,7 @@ if st.session_state.access:
                 # --- Create a NEW sub-container specifically for the results grid ---
                 results_grid_container = st.container(border=True, height=500)
 
-                results_grid_container.write("##### 2. Select an image")
+                results_grid_container.write("##### 3. Select an image")
 
                 # --- Place columns and results INSIDE the new sub-container ---
                 with results_grid_container: # Use 'with' block for clarity
@@ -782,7 +850,7 @@ if st.session_state.access:
         if st.session_state.selected_wikimedia_image_info:
             # This section remains unchanged from the previous version
             img_search_container.markdown("---")
-            img_search_container.markdown("##### 2. Selected Image:")
+            img_search_container.markdown("##### 3. Selected Image:")
             selected_info = st.session_state.selected_wikimedia_image_info
 
             # Display image thumbnail and details
@@ -801,7 +869,7 @@ if st.session_state.access:
 
             # CAPTION GENERATION/EDIT SECTION
             img_search_container.markdown("---") # Separator
-            img_search_container.markdown("##### 3. Generate a General Caption (based on paper summary)")
+            img_search_container.markdown("##### 4. Generate a General Caption (based on paper summary)")
             # Using a sub-container for layout clarity, optional
             caption_editor_container = img_search_container.container()
 
@@ -858,7 +926,7 @@ if st.session_state.access:
 
             # Download Button Logic
             img_search_container.markdown("---")
-            img_search_container.markdown("##### 4. Download Full Resolution Image")
+            img_search_container.markdown("##### 5. Download Full Resolution Image")
             mime_type = selected_info.get('mime', 'application/octet-stream')
             extension_map = {
                 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
@@ -1463,7 +1531,7 @@ if st.session_state.access:
                                 parsed_figures[identifier] = description
                     st.session_state.figure_data = parsed_figures # Store the dict
                     st.session_state.selected_figure_id = None # Reset selection
-                    st.session_state.selected_figure_caption = None
+                    st.session_state.selected_figure_caption = ""
                     st.session_state.ppt_figure_image_bytes = None # Reset selected image bytes
                     if not st.session_state.figure_data: ppt_figure_container.warning("Could not extract figure list from text.")
                     else: ppt_figure_container.success(f"Found {len(st.session_state.figure_data)} figure references in text.")
@@ -1493,7 +1561,7 @@ if st.session_state.access:
             new_selected_id = id_lookup.get(selected_display_string, None)
             if st.session_state.selected_figure_id != new_selected_id:
                 st.session_state.selected_figure_id = new_selected_id
-                st.session_state.selected_figure_caption = None # Reset caption
+                st.session_state.selected_figure_caption = "" # Reset caption
                 st.session_state.ppt_figure_image_bytes = None # Reset image selection
                 st.rerun() # Rerun if selection changed
 
@@ -1513,44 +1581,9 @@ if st.session_state.access:
                 st.rerun()
 
 
-        # --- Step 4: Display Extracted Images and Assign Selected Figure ID ---
-        if st.session_state.extracted_pdf_images:
-            ppt_figure_container.markdown("##### 4. Assign Selected Figure ID to an Extracted Image")
-
-            if not st.session_state.selected_figure_id:
-                ppt_figure_container.warning("Please select a Figure ID from the dropdown (Step 2) first.")
-            else:
-                selected_id = st.session_state.selected_figure_id
-                ppt_figure_container.info(f"Visually find the image corresponding to **{selected_id}** below and click its 'Assign' button.")
-
-                # Display extracted images in columns
-                num_columns = 4 # Show more images per row? Adjust.
-                cols = ppt_figure_container.columns(num_columns)
-                for i, img_dict in enumerate(st.session_state.extracted_pdf_images):
-                    col_index = i % num_columns
-                    with cols[col_index]:
-                        try:
-                            st.image(img_dict["bytes"], caption=f"Extracted Image {i+1} (Page {img_dict['page']})", use_column_width=True)
-                            assign_button_key = f"assign_img_{i}_to_{selected_id}"
-                            if st.button(f"Assign as {selected_id}", key=assign_button_key):
-                                st.session_state.ppt_figure_image_bytes = img_dict["bytes"]
-                                ppt_figure_container.success(f"Image {i+1} assigned as {selected_id}.")
-                                # Optional: Rerun to maybe highlight the chosen one or update UI
-                                st.rerun()
-                            st.markdown("---")
-                        except Exception as img_display_e:
-                            st.error(f"Could not display image {i+1}: {img_display_e}")
-
-        # --- Display Confirmation of Assigned Image ---
-        if st.session_state.selected_figure_id and st.session_state.ppt_figure_image_bytes:
-            ppt_figure_container.markdown("---")
-            ppt_figure_container.markdown(f"**Image Assigned for {st.session_state.selected_figure_id}:**")
-            ppt_figure_container.image(st.session_state.ppt_figure_image_bytes, width=200) # Show small preview
-
-
-        # --- Step 5: Generate Caption for Selected Figure ID ---
+        # --- Step 4: Generate Caption for Selected Figure ID ---
         if st.session_state.selected_figure_id: # Only allow caption gen if ID is selected
-            ppt_figure_container.markdown("##### 5. Generate/Edit Caption")
+            ppt_figure_container.markdown("##### 4. Generate Editorial Figure Caption")
             # (This reuses the logic for generating caption based on selected_figure_id
             # and populating selected_figure_caption - ensure button key is unique)
             caption_subcontainer = ppt_figure_container.container() # Separate container
@@ -1562,7 +1595,7 @@ if st.session_state.access:
                     st.rerun()
 
             # Display editable caption
-            current_ppt_caption = st.session_state.selected_figure_caption if st.session_state.selected_figure_caption is not None else ""
+            current_ppt_caption = st.session_state.selected_figure_caption if len(st.session_state.selected_figure_caption) > 0 else ""
             edited_ppt_caption = caption_subcontainer.text_area(
                 "Caption:", value=current_ppt_caption, key="edit_ppt_caption", height=100,
                 placeholder=f"Enter caption for {st.session_state.selected_figure_id} or generate suggestion..."

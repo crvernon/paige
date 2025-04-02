@@ -118,7 +118,7 @@ prompt_queue = {
 
     "figure": """
     Generate a list of 5 search strings for use in the website that hosts free stock photos  \
-    (e.g., https://www.pexels.com/) that would be representative of an aspect of the following research statement \
+    (e.g., wikimedia commons image archive) that would be representative of an aspect of the following research statement \
     delimited by triple backticks.  
 
     ```{0}```
@@ -183,7 +183,7 @@ prompt_queue = {
     ```
     """,
 
-    "reduce_wordcount": """Reduce the current text to be greater than {0} words and less than or equal to {1} words.  \
+    "reduce_wordcount": """Reduce the current text to be greater than {0} words and less than or equal to {1} words. 
     The following is the text delimited by triple backquotes:
      
      ```{2}```
