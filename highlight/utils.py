@@ -545,3 +545,32 @@ def generate_content(
          # Display error in the container
          container.error(f"Error generating content for '{prompt_name}': {e}")
          return None # Return None or empty string on error
+
+
+@st.cache_data(max_entries=5) # Cache results for 5 different PDF uploads
+def extract_images_from_pdf(pdf_bytes):
+    """Extracts images from PDF bytes and returns them as a list of BytesIO objects."""
+    images = []
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            image_list = page.get_images(full=True)
+            for img_index, img_info in enumerate(image_list):
+                xref = img_info[0]
+                base_image = doc.extract_image(xref)
+                image_bytes = base_image["image"]
+                # Convert to BytesIO for easier handling later
+                img_bio = io.BytesIO(image_bytes)
+                images.append({
+                    "index": len(images), # Simple 0-based index
+                    "page": page_num + 1,
+                    "xref": xref,
+                    "bytes": image_bytes, # Store raw bytes
+                    # Keep BytesIO too? Or create on demand? Let's store raw bytes.
+                })
+        doc.close()
+        return images
+    except Exception as e:
+        st.error(f"Error extracting images from PDF: {e}")
+        return [] # Return empty list on error

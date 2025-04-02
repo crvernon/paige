@@ -1,3 +1,4 @@
+import datetime
 import io
 import os
 import importlib
@@ -30,6 +31,18 @@ def sanitize_filename(name):
     name = name.strip('_.')
     # Limit length (optional but good practice)
     return name[:100] if len(name) > 100 else name
+
+
+def get_placeholder(slide, name):
+    for shape in slide.placeholders:
+        # Check placeholder name (shape.name)
+        if shape.name == name:
+            return shape
+    # Fallback: Check shapes by name if not found in placeholders (might be less reliable)
+    for shape in slide.shapes:
+            if shape.name == name:
+                return shape
+    return None
 
 
 if "reduce_document" not in st.session_state:
@@ -81,6 +94,9 @@ if "funding" not in st.session_state:
 if "citation" not in st.session_state:
     st.session_state.citation = None
 
+if "base_export_filename" not in st.session_state:
+    st.session_state.base_export_filename = f"ber-highlight_{datetime.date.today().strftime('%d%b%Y').lower()}"
+
 if "related_links" not in st.session_state:
     st.session_state.related_links = None
 
@@ -117,9 +133,6 @@ if "ppt_impact_response" not in st.session_state:
 
 if "figure_recommendation" not in st.session_state:
     st.session_state.figure_recommendation = None
-
-if "citation" not in st.session_state:
-    st.session_state.citation = None
 
 if "search_phrase" not in st.session_state:
     st.session_state.search_phrase = None
@@ -177,6 +190,13 @@ if "wikimedia_limit" not in st.session_state:
 if "photo" not in st.session_state: st.session_state.photo = None # Will hold BytesIO
 if "photo_link" not in st.session_state: st.session_state.photo_link = None
 if "photo_site_name" not in st.session_state: st.session_state.photo_site_name = None
+
+if "extracted_pdf_images" not in st.session_state:
+    # List of dicts like [{"index": 0, "page": 1, "xref": 123, "bytes": b'...'}, ...]
+    st.session_state.extracted_pdf_images = None
+if "ppt_figure_image_bytes" not in st.session_state:
+    # Holds the raw bytes of the image chosen via "Assign Image" button
+    st.session_state.ppt_figure_image_bytes = None
 
 # Force responsive layout for columns also on mobile
 st.write(
@@ -308,7 +328,13 @@ if st.session_state.access:
             )
 
         # word document content
-        st.markdown("### Content to fill in Word document template:")
+        st.markdown("### Section 1:  Content to fill in Word document template:")
+
+# ------------------------------------------------
+# -- DOC:  START TITLE SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")
 
         # title section
         title_container = st.container()
@@ -360,6 +386,12 @@ if st.session_state.access:
                     label_visibility="collapsed",
                     height=50
                 )
+
+# ------------------------------------------------
+# -- DOC:  START SUBTITLE SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")  
 
         # subtitle section
         subtitle_container = st.container()
@@ -416,6 +448,12 @@ if st.session_state.access:
                     label_visibility="collapsed",
                     height=50
                 )
+
+# ------------------------------------------------
+# -- DOC:  START SCIENCE SUMMARY SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")  
 
         # science section
         science_container = st.container()
@@ -477,6 +515,12 @@ if st.session_state.access:
                     height=250
                 )
 
+# ------------------------------------------------
+# -- DOC:  START IMPACT SUMMARY SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")  
+
         # impact section
         impact_container = st.container()
         impact_container.markdown("##### Generate impact summary from text content")
@@ -536,6 +580,12 @@ if st.session_state.access:
                     label_visibility="collapsed",
                     height=250
                 )
+
+# ------------------------------------------------
+# -- DOC:  START GENERAL SUMMARY SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")  
 
         # general summary section
         summary_container = st.container()
@@ -597,9 +647,18 @@ if st.session_state.access:
 # -- DOC:  START PHOTO SELECTION --> 
 # ------------------------------------------------
 
-        st.markdown("### Find Image for Word Document (Wikimedia Commons)")
+        st.markdown("---") 
+
+        st.markdown("##### Find an Image for your Word Document")
+        st.markdown(
+            "This is a convenience service and uses Wikimedia Commons due to their images being fully open and reusable.  " + 
+            "That being stated, you may not always be able to find what you need in their database and may have to " + 
+            "search another resource.  Simply do not execute this block if you intend to find an image elsewhere."
+        )
         # --- Main Container for this Section ---
         img_search_container = st.container(border=True)
+
+        img_search_container.write("##### 1. Find an image")
 
         # --- Determine Default Query ---
         default_query = ""
@@ -667,7 +726,8 @@ if st.session_state.access:
 
                 # --- Create a NEW sub-container specifically for the results grid ---
                 results_grid_container = st.container(border=True, height=500)
-                # This provides the border. It will grow vertically with content.
+
+                results_grid_container.write("##### 2. Select an image")
 
                 # --- Place columns and results INSIDE the new sub-container ---
                 with results_grid_container: # Use 'with' block for clarity
@@ -722,7 +782,7 @@ if st.session_state.access:
         if st.session_state.selected_wikimedia_image_info:
             # This section remains unchanged from the previous version
             img_search_container.markdown("---")
-            img_search_container.markdown("**Selected Image:**")
+            img_search_container.markdown("##### 2. Selected Image:")
             selected_info = st.session_state.selected_wikimedia_image_info
 
             # Display image thumbnail and details
@@ -741,7 +801,7 @@ if st.session_state.access:
 
             # CAPTION GENERATION/EDIT SECTION
             img_search_container.markdown("---") # Separator
-            img_search_container.markdown("**Caption for Selected Image:** (Based on paper summary)")
+            img_search_container.markdown("##### 3. Generate a General Caption (based on paper summary)")
             # Using a sub-container for layout clarity, optional
             caption_editor_container = img_search_container.container()
 
@@ -797,14 +857,15 @@ if st.session_state.access:
 
 
             # Download Button Logic
-            img_search_container.markdown("**Download Full Resolution Image:**")
+            img_search_container.markdown("---")
+            img_search_container.markdown("##### 4. Download Full Resolution Image")
             mime_type = selected_info.get('mime', 'application/octet-stream')
             extension_map = {
                 'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
                 'image/svg+xml': '.svg', 'image/tiff': '.tif'}
             file_extension = extension_map.get(mime_type, '.png')
             base_filename = sanitize_filename(selected_info.get('title', 'wikimedia_image'))
-            download_filename = f"{base_filename}{file_extension}"
+            download_filename = f"{st.session_state.base_export_filename}{file_extension}"
 
             try:
                 # --- Define headers for download ---
@@ -825,7 +886,7 @@ if st.session_state.access:
                 mime=mime_type,
                 key=f"download_{selected_info.get('id', 'selected')}"
                 )
-                img_search_container.caption(f"File: `{download_filename}` ({mime_type})")
+                img_search_container.caption(f"Selected file: `{download_filename}` ({mime_type})")
                 img_search_container.caption(f"Remember to check attribution requirements at the source link above.")
 
             except requests.exceptions.RequestException as req_e:
@@ -837,6 +898,8 @@ if st.session_state.access:
 # ------------------------------------------------
 # -- DOC:  START CITATION SELECTION --> 
 # ------------------------------------------------
+
+        st.markdown("---")  
 
         # citation recommendations section
         citation_container = st.container()
@@ -865,6 +928,12 @@ if st.session_state.access:
                     label_visibility="collapsed",
                     height=200
                 )
+
+# ------------------------------------------------
+# -- DOC:  START FUNDING SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---")  
 
         # funding recommendations section
         funding_container = st.container()
@@ -902,6 +971,8 @@ if st.session_state.access:
 # -- DOC:  START POINT OF CONTACT SECTION --> 
 # ------------------------------------------------
 
+        st.markdown("---")  
+
         # point of contact box
         poc_container = st.container()
         poc_container.markdown("##### Point of contact for the research by project")
@@ -933,8 +1004,78 @@ if st.session_state.access:
         )
 
 # ------------------------------------------------
+# -- Generate base file name for exports --> 
+# ------------------------------------------------
+
+        if st.session_state.citation:
+            citation = st.session_state.citation
+            # Get today's date formatted
+            today_str = datetime.date.today().strftime("%d%b%Y").lower()
+
+            # --- Attempt to parse citation ---
+            # NOTE: This parsing is based on common formats and might fail for others.
+            last_name = "unknown"
+            year = "YYYY"
+            journal_abbrev = "journal"
+
+            try:
+                # 1. Extract First Author Last Name
+                # Assumes format "LastName, F. M., Second Author..." or "LastName FM, Second Author..."
+                first_author_part = citation.split(',')[0].strip()
+                # Handle cases like "LastName FM" vs "LastName"
+                if ' ' in first_author_part and not first_author_part.isupper(): # Avoid splitting acronyms/all caps
+                    last_name = first_author_part.split(' ')[0].strip().lower()
+                else:
+                    last_name = first_author_part.lower()
+                # Basic cleaning if needed
+                last_name = re.sub(r'[^a-z\-]', '', last_name) # Keep letters, hyphen
+                if not last_name: last_name = "unknown" # Fallback
+
+            except Exception:
+                last_name = "unknown" # Fallback on any parsing error
+
+            try:
+                # 2. Extract Year (look for 4 digits often after author block or date)
+                # Regex looks for ". YYYY." or "(YYYY)." or " YYYY;" etc.
+                match = re.search(r'[\.\(;]\s*(\d{4})[\.\);]', citation)
+                if match:
+                    year = match.group(1)
+                else: # Fallback if first pattern fails
+                    match = re.search(r'\b(\d{4})\b', citation) # Find any 4-digit number
+                    if match: year = match.group(1) # Less reliable, might pick wrong number
+
+            except Exception:
+                year = "YYYY"
+
+            try:
+                # 3. Extract Journal Abbreviation (This is the most fragile part)
+                # Attempt 1: Look for text between title (in quotes) and volume (digits)
+                match = re.search(r'["”]\s*\.\s*([^,.:]+?)\s*\d+[:\(]', citation, re.IGNORECASE)
+                if match:
+                    journal_part = match.group(1).strip()
+                    # Abbreviate: lowercase, remove spaces/periods/commas
+                    journal_abbrev = re.sub(r'[\s\.,]', '', journal_part).lower()
+                else:
+                    # Attempt 2: Look for likely candidates based on common knowledge (less robust)
+                    # This part could be expanded significantly or use external lookups
+                    if "applied energy" in citation.lower(): journal_abbrev = "appliedenergy"
+                    elif "journal of" in citation.lower(): journal_abbrev = "journal" # Example placeholder
+                    # Add more rules or default
+                    else: journal_abbrev = "journal" # Default if not found
+
+                if not journal_abbrev: journal_abbrev = "journal" # Final fallback
+
+            except Exception:
+                journal_abbrev = "journal"
+
+            # --- Construct the base filename ---
+            st.session_state.base_export_filename = f"{last_name}_etal_{year}_{journal_abbrev}_ber-highlight_{today_str}"
+
+# ------------------------------------------------
 # -- DOC:  START EXPORT SECTION --> 
 # ------------------------------------------------
+
+        st.markdown("---")  
 
         export_container = st.container()
         export_container.markdown("##### Export Word document with new content when ready")
@@ -943,18 +1084,16 @@ if st.session_state.access:
         word_parameters = {
             'title': st.session_state.title_response,
             'subtitle': st.session_state.subtitle_response,
-            # Initialize photo parameters - will be overwritten if image selected
             'photo': None,
             'photo_link': st.session_state.photo_link,
             'photo_site_name': "Wikimedia Commons",
-            # Check which caption you want here: general artistic one? or figure-specific?
             'image_caption': st.session_state.image_caption,
             'science': st.session_state.science_response,
             'impact': st.session_state.impact_response,
             'summary': st.session_state.summary_response,
             'funding': st.session_state.funding,
             'citation': st.session_state.citation,
-            'related_links': st.session_state.related_links, # Ensure this state exists if used
+            'related_links': st.session_state.related_links,
             'point_of_contact': st.session_state.point_of_contact,
         }
 
@@ -1007,11 +1146,10 @@ if st.session_state.access:
             export_container.download_button(
                 label="Export Word Document",
                 data=bio.getvalue(),
-                file_name=f"highlight_{st.session_state.output_file or 'output'}.docx",
+                file_name=f"{st.session_state.base_export_filename}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
 
-        # ... (Error handling remains the same) ...
         except Exception as e:
             export_container.error(f"Error generating Word document: {e}")
             export_container.error("Check template placeholders ({{photo}}, {{photo_link}}, {{photo_site_name}}) and image preparation.")
@@ -1020,8 +1158,16 @@ if st.session_state.access:
 # -- PPT:  START POWER POINT SECTION --> 
 # ------------------------------------------------
 
+        st.markdown("---")  
+
         # power point slide content
-        st.markdown("### Content to fill in PowerPoint template:")
+        st.markdown("### Section 2:  Content to fill in PowerPoint template:")
+
+# ------------------------------------------------
+# -- PPT:  START OBJECTIVE SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---") 
 
         # objective section
         objective_container = st.container()
@@ -1072,8 +1218,12 @@ if st.session_state.access:
                     height=250
                 )
 
-# -- PPT:  START APPROACH SECTION -->
-        # approach section
+# ------------------------------------------------
+# -- PPT:  START APPROACH SECTION --> 
+# ------------------------------------------------
+
+        st.markdown("---") 
+
         approach_container = st.container()
         approach_container.markdown("##### Generate approach summary from text content")
 
@@ -1178,11 +1328,11 @@ if st.session_state.access:
             # This ensures consistency for PowerPoint generation etc.
             st.session_state.approach_response = updated_approach_list
 
-# <-- PPT:  END APPROACH SECTION --
-
 # ------------------------------------------------
 # -- PPT:  START IMPACT SECTION --> 
 # ------------------------------------------------
+
+        st.markdown("---")
 
         # power point impact section
         ppt_impact_container = st.container()
@@ -1277,160 +1427,155 @@ if st.session_state.access:
             ]
             st.session_state.ppt_impact_response = updated_impact_list
 
-# <-- PPT:  END IMPACT SECTION --
-
 # ------------------------------------------------
 # -- PPT:  START FIGURE SELECTION --> 
 # ------------------------------------------------
+
+        st.markdown("---")
+
         # --- New Figure Selection and Caption Section ---
         st.markdown("##### Select Figure and Generate Caption for PowerPoint:")
+
         figure_select_container = st.container(border=True) # Use border for visual grouping
-        # --- 1. Button to List Figures ---
-        figure_select_container.markdown("##### 1. Extract Figure List with Descriptions")
-        if figure_select_container.button("List Figures with Descriptions"): # Renamed button slightly
-            with st.spinner("Extracting figure list and descriptions from paper..."):
+        ppt_figure_container = st.container(border=True)
+
+        # --- Step 1: List Figure IDs/Descriptions (using LLM) ---
+        ppt_figure_container.markdown("##### 1. List Figures Found in Paper")
+        if ppt_figure_container.button("List Figures from Text", key="ppt_list_figs"):
+            # This reuses the logic from your existing PPT figure section
+            with st.spinner("Extracting figure list from paper text..."):
                 try:
-                    # Step 1: Format the user prompt string using the simpler generate_prompt
-                    user_prompt_for_figlist = hlt.generate_prompt(
-                        content=content_dict["content"],
-                        prompt_name="figure_list"
-                    )
-
-                    # Step 2: Call the LLM with the formatted prompt using generate_prompt_content
-                    figure_list_raw = hlt.generate_prompt_content(
-                        client=st.session_state.client,
-                        system_scope=prompts.SYSTEM_SCOPE,
-                        prompt=user_prompt_for_figlist,
-                        max_tokens=1000, # Adjust as needed
-                        temperature=0.1, # Low temp for extraction consistency
-                        max_allowable_tokens=st.session_state.max_allowable_tokens,
-                        model=st.session_state.model,
-                        package=st.session_state.package
-                    )
-
-                    # --- Parsing Logic ---
+                    # (Existing logic calling hlt.generate_prompt + hlt.generate_prompt_content
+                    #  using the 'figure_list' prompt to populate st.session_state.figure_data)
+                    # ... Example call structure ...
+                    user_prompt_for_figlist = hlt.generate_prompt(content=content_dict["content"], prompt_name="figure_list")
+                    figure_list_raw = hlt.generate_prompt_content(client=st.session_state.client, system_scope=prompts.SYSTEM_SCOPE, prompt=user_prompt_for_figlist, max_tokens=1000, temperature=0.1, max_allowable_tokens=st.session_state.max_allowable_tokens, model=st.session_state.model, package=st.session_state.package)
                     parsed_figures = {}
                     lines = figure_list_raw.strip().split('\n')
+                    # (Existing parsing logic for 'Identifier :: Description' format)
                     for line in lines:
-                        # Filter out tables explicitly
-                        if line.strip().lower().startswith("table"):
-                            continue
+                        if line.strip().lower().startswith("table"): continue
                         if ' :: ' in line:
                             parts = line.split(' :: ', 1)
                             identifier = parts[0].strip()
                             description = parts[1].strip()
-                            # Double-check identifier isn't a table
                             if identifier and description and not identifier.lower().startswith("table"):
                                 parsed_figures[identifier] = description
-
-                    st.session_state.figure_data = parsed_figures
-                    st.session_state.selected_figure_id = None # Reset selection on new list generation
-                    st.session_state.selected_figure_caption = None # Reset caption
-
-                    if not st.session_state.figure_data:
-                        figure_select_container.warning("Could not extract any figure identifiers with descriptions. Check paper format.")
-                    else:
-                        figure_select_container.success(f"Found {len(st.session_state.figure_data)} figures with descriptions.")
-
+                    st.session_state.figure_data = parsed_figures # Store the dict
+                    st.session_state.selected_figure_id = None # Reset selection
+                    st.session_state.selected_figure_caption = None
+                    st.session_state.ppt_figure_image_bytes = None # Reset selected image bytes
+                    if not st.session_state.figure_data: ppt_figure_container.warning("Could not extract figure list from text.")
+                    else: ppt_figure_container.success(f"Found {len(st.session_state.figure_data)} figure references in text.")
                 except Exception as e:
-                    figure_select_container.error(f"Error extracting figure list: {e}")
-                    st.session_state.figure_data = None # Reset on error
+                    ppt_figure_container.error(f"Error listing figures: {e}")
+                    st.session_state.figure_data = None
 
 
-        # --- 2. Display Selection Dropdown ---
+        # --- Step 2: Select Figure ID from Dropdown ---
         if st.session_state.figure_data:
-            figure_select_container.markdown("##### 2. Select Figure")
-
-            # Create display options and map back to ID
-            display_options = ["<Select a Figure>"] + [f"{id}: {desc}" for id, desc in st.session_state.figure_data.items()]
+            ppt_figure_container.markdown("##### 2. Select Figure ID")
+            display_options = ["<Select a Figure ID>"] + [f"{id}: {desc}" for id, desc in st.session_state.figure_data.items()]
             id_lookup = {f"{id}: {desc}": id for id, desc in st.session_state.figure_data.items()}
-
-            # Determine current selection's display string for the dropdown default index
-            current_display_selection = "<Select a Figure>"
+            current_display_selection = "<Select a Figure ID>"
+            # Find current selection display string
             if st.session_state.selected_figure_id and st.session_state.selected_figure_id in st.session_state.figure_data:
                 current_display_selection = f"{st.session_state.selected_figure_id}: {st.session_state.figure_data[st.session_state.selected_figure_id]}"
 
-            selected_display_string = figure_select_container.selectbox(
-                "Choose the figure you want to use:",
+            selected_display_string = ppt_figure_container.selectbox(
+                "Choose the Figure ID for the PowerPoint slide:",
                 options=display_options,
                 index=display_options.index(current_display_selection) if current_display_selection in display_options else 0,
+                key="ppt_select_fig_id",
                 label_visibility="collapsed"
             )
-
-            # Update session state with the actual ID based on the selection
+            # Update selected ID state
             new_selected_id = id_lookup.get(selected_display_string, None)
             if st.session_state.selected_figure_id != new_selected_id:
                 st.session_state.selected_figure_id = new_selected_id
-                st.session_state.selected_figure_caption = None # Reset caption when selection changes
+                st.session_state.selected_figure_caption = None # Reset caption
+                st.session_state.ppt_figure_image_bytes = None # Reset image selection
+                st.rerun() # Rerun if selection changed
 
 
-        # --- 3. Generate Caption for Selected Figure ---
-        if st.session_state.selected_figure_id: # Check if a valid Figure ID is selected
-            selected_id = st.session_state.selected_figure_id
-            figure_select_container.markdown(f"##### 3. Generate Caption for {selected_id}")
+        # --- Step 3: Extract Images from PDF ---
+        ppt_figure_container.markdown("##### 3. Extract Images from PDF")
+        if ppt_figure_container.button("Extract Images", key="ppt_extract_images"):
+            with st.spinner("Extracting images from PDF..."):
+                pdf_bytes = uploaded_file.getvalue() # Get PDF bytes from uploaded file
+                st.session_state.extracted_pdf_images = hlt.extract_images_from_pdf(pdf_bytes)
+                if st.session_state.extracted_pdf_images:
+                    ppt_figure_container.success(f"Extracted {len(st.session_state.extracted_pdf_images)} images.")
+                else:
+                    ppt_figure_container.info("No images found or error during extraction.")
+                # Reset assignment if images are re-extracted
+                st.session_state.ppt_figure_image_bytes = None
+                st.rerun()
 
-            # Caption Temperature Slider
-            figure_select_container.markdown("Set desired temperature for caption generation:")
-            caption_temperature = figure_select_container.slider(
-                "Selected Figure Caption Temperature", 0.0, 1.0, 0.2, # Default temp
-                key="selected_fig_caption_temp", # Unique key
-                label_visibility="collapsed"
+
+        # --- Step 4: Display Extracted Images and Assign Selected Figure ID ---
+        if st.session_state.extracted_pdf_images:
+            ppt_figure_container.markdown("##### 4. Assign Selected Figure ID to an Extracted Image")
+
+            if not st.session_state.selected_figure_id:
+                ppt_figure_container.warning("Please select a Figure ID from the dropdown (Step 2) first.")
+            else:
+                selected_id = st.session_state.selected_figure_id
+                ppt_figure_container.info(f"Visually find the image corresponding to **{selected_id}** below and click its 'Assign' button.")
+
+                # Display extracted images in columns
+                num_columns = 4 # Show more images per row? Adjust.
+                cols = ppt_figure_container.columns(num_columns)
+                for i, img_dict in enumerate(st.session_state.extracted_pdf_images):
+                    col_index = i % num_columns
+                    with cols[col_index]:
+                        try:
+                            st.image(img_dict["bytes"], caption=f"Extracted Image {i+1} (Page {img_dict['page']})", use_column_width=True)
+                            assign_button_key = f"assign_img_{i}_to_{selected_id}"
+                            if st.button(f"Assign as {selected_id}", key=assign_button_key):
+                                st.session_state.ppt_figure_image_bytes = img_dict["bytes"]
+                                ppt_figure_container.success(f"Image {i+1} assigned as {selected_id}.")
+                                # Optional: Rerun to maybe highlight the chosen one or update UI
+                                st.rerun()
+                            st.markdown("---")
+                        except Exception as img_display_e:
+                            st.error(f"Could not display image {i+1}: {img_display_e}")
+
+        # --- Display Confirmation of Assigned Image ---
+        if st.session_state.selected_figure_id and st.session_state.ppt_figure_image_bytes:
+            ppt_figure_container.markdown("---")
+            ppt_figure_container.markdown(f"**Image Assigned for {st.session_state.selected_figure_id}:**")
+            ppt_figure_container.image(st.session_state.ppt_figure_image_bytes, width=200) # Show small preview
+
+
+        # --- Step 5: Generate Caption for Selected Figure ID ---
+        if st.session_state.selected_figure_id: # Only allow caption gen if ID is selected
+            ppt_figure_container.markdown("##### 5. Generate/Edit Caption")
+            # (This reuses the logic for generating caption based on selected_figure_id
+            # and populating selected_figure_caption - ensure button key is unique)
+            caption_subcontainer = ppt_figure_container.container() # Separate container
+            if caption_subcontainer.button(f"Suggest Caption for {st.session_state.selected_figure_id}", key="gen_ppt_fig_caption"):
+                with st.spinner("Generating caption..."):
+                    user_prompt_caption = hlt.generate_prompt(content=content_dict["content"], prompt_name="selected_figure_caption", additional_content=st.session_state.selected_figure_id)
+                    caption_response = hlt.generate_prompt_content(client=st.session_state.client, system_scope=prompts.SYSTEM_SCOPE, prompt=user_prompt_caption, max_tokens=150, temperature=0.2, max_allowable_tokens=st.session_state.max_allowable_tokens, model=st.session_state.model, package=st.session_state.package)
+                    st.session_state.selected_figure_caption = caption_response.strip()
+                    st.rerun()
+
+            # Display editable caption
+            current_ppt_caption = st.session_state.selected_figure_caption if st.session_state.selected_figure_caption is not None else ""
+            edited_ppt_caption = caption_subcontainer.text_area(
+                "Caption:", value=current_ppt_caption, key="edit_ppt_caption", height=100,
+                placeholder=f"Enter caption for {st.session_state.selected_figure_id} or generate suggestion..."
             )
-
-            # --- CORRECTED Button Handler for Caption Generation ---
-            if figure_select_container.button(f"Generate Caption for {selected_id}"):
-                with st.spinner(f"Generating caption for {selected_id}..."):
-                    try:
-                        # Step 1: Format the user prompt string for the caption
-                        user_prompt_caption = hlt.generate_prompt(
-                            content=content_dict["content"], # Main paper content
-                            prompt_name="selected_figure_caption",
-                            additional_content=selected_id # Pass the selected figure ID
-                        )
-
-                        # Step 2: Call the LLM execution function to get the caption
-                        caption_response = hlt.generate_prompt_content(
-                            client=st.session_state.client,
-                            system_scope=prompts.SYSTEM_SCOPE,
-                            prompt=user_prompt_caption, # Pass the formatted caption prompt
-                            max_tokens=150, # Adjust max tokens for caption length
-                            temperature=caption_temperature, # Use slider value
-                            max_allowable_tokens=st.session_state.max_allowable_tokens,
-                            model=st.session_state.model,
-                            package=st.session_state.package
-                        )
-
-                        # Store the generated caption
-                        st.session_state.selected_figure_caption = caption_response.strip()
-                        figure_select_container.success("Caption generated!")
-
-                    except Exception as e:
-                        figure_select_container.error(f"Error generating caption: {e}")
-                        st.session_state.selected_figure_caption = None # Reset on error
-
-
-        # --- 4. Display Generated Caption (Read-only in this version) ---
-        # Note: Making this editable would require parsing edits back, less common for captions.
-        if st.session_state.selected_figure_caption is not None: # Check if caption exists
-            figure_select_container.markdown("##### Generated Caption:")
-            figure_select_container.text_area(
-                label="Generated Caption Result:", # Label for accessibility
-                value=st.session_state.selected_figure_caption,
-                height=100,
-                key="selected_fig_caption_display",
-                label_visibility="collapsed",
-                disabled=False # Display as read-only
-            )
-        elif st.session_state.selected_figure_id:
-            # Show message if figure selected but caption not generated yet
-            figure_select_container.info("Click the button above to generate the caption for the selected figure.")
-
-
-# <-- PPT:  END FIGURE SELECTION --
+            if edited_ppt_caption != current_ppt_caption:
+                st.session_state.selected_figure_caption = edited_ppt_caption
+                st.rerun()
 
 # ------------------------------------------------
 # -- PPT:  START EXPORT -->
 # ------------------------------------------------
+
+        st.markdown("---")
 
         # Add PowerPoint export container at the end
         export_ppt_container = st.container()
@@ -1464,79 +1609,88 @@ if st.session_state.access:
                 else:
                     impact_points = ["Impact points not generated."]
 
-                # Iterate over all slides to find the text boxes labeled "impact_0", "impact_1", "impact_2"
+                # --- Process Slides ---
                 for slide in prs.slides:
-                    for shape in slide.shapes:
-                        if shape.has_text_frame:
 
-                            # Add this block to handle the figure caption:
-                            if "caption" in shape.text_frame.text:
-                                if st.session_state.selected_figure_caption:
-                                    shape.text_frame.text = st.session_state.selected_figure_caption
-                                    # Adjust font size/style as needed
-                                    for paragraph in shape.text_frame.paragraphs:
-                                        paragraph.font.size = Pt(10)  # Set font size to 10
-                                        paragraph.font.name = 'Arial'  # Set font to Arial
-                                        paragraph.font.bold = True  # Set font to bold
-                                        paragraph.font.color.rgb = RGBColor(0, 0, 255)  # Set font color to blue
-                                        paragraph.alignment = PP_ALIGN.CENTER  # Example alignment
-                                else:
-                                    # Handle case where caption wasn't generated - maybe leave placeholder or put default text
-                                    shape.text_frame.text = "[Figure caption not generated]"
+                    # --- Find Placeholders by Name ---
+                    impact_ph = get_placeholder(slide, "Text Placeholder 10")
+                    approach_ph = get_placeholder(slide, "Text Placeholder 9")
+                    picture_ph = get_placeholder(slide, "Picture Placeholder 2")
+                    caption_ph = get_placeholder(slide, "Text Placeholder 3")
+                    citation_ph = get_placeholder(slide, "Text Placeholder 11")
+                    objective_ph = get_placeholder(slide, "Text Placeholder 8")
+                    title_ph = get_placeholder(slide, "Title 1")
 
-                            # Handle title insertion and maintain font size and bold
-                            if "title" in shape.text_frame.text:
-                                shape.text_frame.text = st.session_state.title_response
+                    # title
+                    tf = title_ph.text_frame
+                    tf.clear()
+                    tf.text = st.session_state.title_response
 
-                                # Ensure font size and bold settings are maintained for each paragraph
-                                for paragraph in shape.text_frame.paragraphs:
-                                    for run in paragraph.runs:
-                                        run.font.size = Pt(24)  # Example size, adjust as needed
-                                        run.font.bold = True  # Maintain bold
-                                        run.alignment = PP_ALIGN.LEFT  # Align title
+                    # objective
+                    tf = objective_ph.text_frame
+                    tf.clear()
+                    tf.text = st.session_state.objective_response
+                    
+                    # caption
+                    tf = caption_ph.text_frame
+                    tf.clear()
+                    tf.text = st.session_state.selected_figure_caption
 
-                            # Handle citation insertion and maintain font size and bold
-                            if "citation" in shape.text_frame.text:
-                                shape.text_frame.text = st.session_state.citation
+                    # citation
+                    tf = citation_ph.text_frame
+                    tf.clear()
+                    tf.text = st.session_state.citation
 
-                                # Ensure font size and bold settings are maintained for each paragraph
-                                for paragraph in shape.text_frame.paragraphs:
-                                    for run in paragraph.runs:
-                                        run.font.size = Pt(11)  # Example size for citation, adjust as needed
-                                        run.font.bold = False  # Citation typically isn't bold
-                                        run.alignment = PP_ALIGN.LEFT  # Align citation
+                    # --- Populate List Placeholders ---
+                    if approach_ph and hasattr(approach_ph, 'text_frame') and approach_points:
+                        tf = approach_ph.text_frame
+                        tf.clear()
+                        if len(tf.paragraphs): # Remove potentially empty first paragraph after clear
+                             p = tf.paragraphs[0]
+                             if not p.text.strip() and len(p.runs) == 0:
+                                 p._element.getparent().remove(p._element)
+                        # Add points
+                        for point_text in approach_points[:3]: # Limit to 3
+                            p = tf.add_paragraph()
+                            p.text = point_text.strip().lstrip('- ')
+                            p.level = 0 # Apply bullet style from template
+                            # Optional: Apply specific font overrides if needed
+                            p.font.size = Pt(13)
+                            p.alignment = PP_ALIGN.LEFT
 
-                            if shape.text_frame.text == "objective_0":
-                                # Set the text of the text box to the objective response
-                                shape.text_frame.text = st.session_state.objective_response
+                    if impact_ph and hasattr(impact_ph, 'text_frame') and impact_points:
+                        tf = impact_ph.text_frame
+                        tf.clear()
+                        if len(tf.paragraphs): # Remove potentially empty first paragraph
+                             p = tf.paragraphs[0]
+                             if not p.text.strip() and len(p.runs) == 0:
+                                 p._element.getparent().remove(p._element)
+                        # Add points
+                        for point_text in impact_points[:3]: # Limit to 3
+                            p = tf.add_paragraph()
+                            p.text = point_text.strip().lstrip('- ')
+                            p.level = 0 # Apply bullet style from template
+                            # Optional: Apply specific font overrides if needed
+                            p.font.size = Pt(13)
+                            p.alignment = PP_ALIGN.LEFT
 
-                                # Optional: Adjust font size and alignment for the objective
-                                for paragraph in shape.text_frame.paragraphs:
-                                    paragraph.font.size = Pt(13)  # Set font size
-                                    paragraph.alignment = PP_ALIGN.LEFT  # Set alignment
-
-                            # Handle approach bullet points
-                            if "approach_0" in shape.text_frame.text:
-                                shape.text_frame.clear()
-                                # Use the list directly
-                                for i, approach_point in enumerate(approach_points[:3]): # Limit to 3 points
-                                    p = shape.text_frame.add_paragraph()
-                                    # Remove leading hyphens if they exist before adding to PPT
-                                    p.text = approach_point.strip().lstrip('- ')
-                                    p.level = 0
-                                    p.font.size = Pt(13)
-                                    p.alignment = PP_ALIGN.LEFT
-
-                            # Handle the impact bullet points
-                            # (Consider making ppt_impact structured too for consistency)
-                            if "impact_0" in shape.text_frame.text:
-                                shape.text_frame.clear()
-                                for i, impact_point in enumerate(impact_points[:3]): # Limit to 3
-                                    p = shape.text_frame.add_paragraph()
-                                    p.text = impact_point.strip().lstrip('- ')
-                                    p.level = 0
-                                    p.font.size = Pt(13)
-                                    p.alignment = PP_ALIGN.LEFT
+                    # --- Populate Picture Placeholder ---
+                    if picture_ph:
+                         # Check if image bytes exist in the dedicated PPT state variable
+                         if st.session_state.get("ppt_figure_image_bytes") is not None:
+                            try:
+                                # Create BytesIO stream from stored bytes
+                                image_stream = io.BytesIO(st.session_state.ppt_figure_image_bytes)
+                                image_stream.seek(0)
+                                # This replaces the placeholder shape with the picture
+                                # May need to adjust size/position afterwards depending on placeholder type
+                                picture_ph.insert_picture(image_stream)
+                                export_container.info(f"Inserted assigned image into '{picture_ph.name}'.") # Debug message
+                            except Exception as pic_e:
+                                export_container.warning(f"Could not insert picture into '{picture_ph.name}': {pic_e}")
+                         else:
+                            export_container.warning(f"Picture placeholder '{picture_ph.name}' found, but no image was assigned.")
+                    # --- End Picture Placeholder ---
 
                 # Save the modified presentation to a BytesIO object
                 ppt_io = io.BytesIO()
@@ -1547,7 +1701,7 @@ if st.session_state.access:
                 ppt_export_success = export_ppt_container.download_button(
                     label="Export PowerPoint Presentation",
                     data=ppt_io,
-                    file_name="modified_highlight_template.pptx",
+                    file_name=f"{st.session_state.base_export_filename}.pptx",
                     mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
                 )
 
