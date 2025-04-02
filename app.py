@@ -150,6 +150,34 @@ if "project_info" not in st.session_state:
             "version": "2024-02-01",
             "project": "IM3"
         },
+        os.getenv("GCIMS_ACCESS=", default=None): {
+            "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
+            "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
+            "deployment": "gpt-4o",
+            "version": "2024-02-01",
+            "project": "GCIMS"
+        },
+        os.getenv("ICOM_ACCESS=", default=None): {
+            "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
+            "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
+            "deployment": "gpt-4o",
+            "version": "2024-02-01",
+            "project": "ICoM"
+        },
+        os.getenv("PUGET_ACCESS=", default=None): {
+            "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
+            "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
+            "deployment": "gpt-4o",
+            "version": "2024-02-01",
+            "project": "Puget Sound"
+        },
+        os.getenv("GLM_ACCESS=", default=None): {
+            "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
+            "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
+            "deployment": "gpt-4o",
+            "version": "2024-02-01",
+            "project": "COMPASS-GLM"
+        },
     }
 
 if "active_project" not in st.session_state:
@@ -1106,7 +1134,6 @@ if st.session_state.access:
                 "Other",
             ])
         ]
-
         
         poc_container.write("What will be written to the document as the point of contact:")
         poc_parts = st.session_state.point_of_contact.split("\n")
