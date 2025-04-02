@@ -150,28 +150,28 @@ if "project_info" not in st.session_state:
             "version": "2024-02-01",
             "project": "IM3"
         },
-        os.getenv("GCIMS_ACCESS=", default=None): {
+        os.getenv("GCIMS_ACCESS", default=None): {
             "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
             "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
             "deployment": "gpt-4o",
             "version": "2024-02-01",
             "project": "GCIMS"
         },
-        os.getenv("ICOM_ACCESS=", default=None): {
+        os.getenv("ICOM_ACCESS", default=None): {
             "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
             "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
             "deployment": "gpt-4o",
             "version": "2024-02-01",
             "project": "ICoM"
         },
-        os.getenv("PUGET_ACCESS=", default=None): {
+        os.getenv("PUGET_ACCESS", default=None): {
             "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
             "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
             "deployment": "gpt-4o",
             "version": "2024-02-01",
             "project": "Puget Sound"
         },
-        os.getenv("GLM_ACCESS=", default=None): {
+        os.getenv("GLM_ACCESS", default=None): {
             "key": os.getenv("IM3_AZURE_OPENAI_API_KEY", default=None),
             "endpoint": os.getenv("IM3_AZURE_OPENAI_ENDPOINT", default=None),
             "deployment": "gpt-4o",
