@@ -1,3 +1,4 @@
+import base64
 import datetime
 import io
 import os
@@ -216,6 +217,53 @@ st.write(
     </style>""",
     unsafe_allow_html=True,
 )
+
+# Display the logo in the top left corner
+# Define the target URL for the hyperlink
+target_url = "https://im3.pnnl.gov/"
+
+# --- Load Image Bytes ---
+logo_bytes = None
+try:
+    logo_path = importlib.resources.files('highlight.data').joinpath('im3.png')
+    with logo_path.open("rb") as f:
+        logo_bytes = f.read()
+except FileNotFoundError:
+    st.error("Logo file 'im3.png' not found in package 'highlight.data'.")
+except Exception as e:
+    st.error(f"An error occurred loading the logo bytes: {e}")
+
+# --- If bytes were loaded successfully, create the clickable image ---
+if logo_bytes:
+    try:
+        # 1. Encode the image bytes as Base64
+        b64_logo = base64.b64encode(logo_bytes).decode()
+
+        # 2. Determine the image MIME type (assuming PNG based on filename)
+        #    For more robustness, you could use a library like python-magic
+        #    or check the format if loading with Pillow.
+        image_type = "image/png"
+
+        # 3. Construct the Base64 data URL
+        data_url = f"data:{image_type};base64,{b64_logo}"
+
+        # 4. Define the desired width (adjust as needed)
+        image_width = 59
+
+        # 5. Create the HTML string for the clickable image
+        #    - <a> tag for the link (href=target_url)
+        #    - target="_blank" opens the link in a new tab
+        #    - <img> tag for the image (src=data_url)
+        #    - Use inline style for width control
+        html_code = f'<a href="{target_url}" target="_blank"><img src="{data_url}" alt="IM3 Logo" style="width:{image_width}px;"></a>'
+
+        # 6. Display the HTML using st.markdown
+        #    IMPORTANT: unsafe_allow_html=True is required to render HTML
+        st.markdown(html_code, unsafe_allow_html=True)
+
+    except Exception as e:
+        st.error(f"An error occurred creating the clickable image: {e}")
+
 
 st.markdown(
     """<h1 style='text-align: center;'>
