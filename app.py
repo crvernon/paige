@@ -1564,25 +1564,9 @@ if st.session_state.access:
                 st.session_state.ppt_figure_image_bytes = None # Reset image selection
                 st.rerun() # Rerun if selection changed
 
-
-        # --- Step 3: Extract Images from PDF ---
-        ppt_figure_container.markdown("##### 3. Extract Images from PDF")
-        if ppt_figure_container.button("Extract Images", key="ppt_extract_images"):
-            with st.spinner("Extracting images from PDF..."):
-                pdf_bytes = uploaded_file.getvalue() # Get PDF bytes from uploaded file
-                st.session_state.extracted_pdf_images = hlt.extract_images_from_pdf(pdf_bytes)
-                if st.session_state.extracted_pdf_images:
-                    ppt_figure_container.success(f"Extracted {len(st.session_state.extracted_pdf_images)} images.")
-                else:
-                    ppt_figure_container.info("No images found or error during extraction.")
-                # Reset assignment if images are re-extracted
-                st.session_state.ppt_figure_image_bytes = None
-                st.rerun()
-
-
-        # --- Step 4: Generate Caption for Selected Figure ID ---
+        # --- Step 3: Generate Caption for Selected Figure ID ---
         if st.session_state.selected_figure_id: # Only allow caption gen if ID is selected
-            ppt_figure_container.markdown("##### 4. Generate Editorial Figure Caption")
+            ppt_figure_container.markdown("##### 3. Generate Editorial Figure Caption")
             # (This reuses the logic for generating caption based on selected_figure_id
             # and populating selected_figure_caption - ensure button key is unique)
             caption_subcontainer = ppt_figure_container.container() # Separate container
