@@ -2,85 +2,80 @@
 [![DOI](https://zenodo.org/badge/632456925.svg)](https://zenodo.org/doi/10.5281/zenodo.13750915)
 
 
-## highlight
+## highlight — PAIGE
 
 #### Generate publication highlights using AI
 
-### Setting Up OpenAI API Key
+PAIGE (the PNNL AI assistant for GEnerating publication highlights) is now a
+**modern JavaScript application**: a React + Vite + TypeScript + Tailwind
+single-page app backed by a **FastAPI + [Pydantic AI](https://ai.pydantic.dev/)**
+service. It takes a publication (PDF or text) and drafts a Word highlight
+document and a PowerPoint slide.
 
-To use the OpenAI API, you need to set up an API key and set it as an environment variable.
+> The previous Streamlit app (`app.py`) has been retired. See
+> [`plans/paige-js-migration-plan.md`](plans/paige-js-migration-plan.md) for the
+> migration details.
 
-1. Obtain your OpenAI API key from the [OpenAI website](https://platform.openai.com/api-keys).
+### Architecture
 
-2. Set the API key as an environment variable:
-    - On Windows:
-        ```bash
-        set OPENAI_API_KEY=your_api_key_here
-        ```
-    - On macOS and Linux:
-        ```bash
-        export OPENAI_API_KEY=your_api_key_here
-        ```
-
-Replace `your_api_key_here` with your actual OpenAI API key.
-
-### Installation
-
-#### Clone this repository
-Navigate to the directory you want to store this repo in and run:
-
-```bash
-git clone https://github.com/crvernon/highlight.git
+```
+frontend/   React + Vite + TypeScript + Tailwind SPA (white default background)
+backend/    FastAPI service; all AI runs through Pydantic AI
+highlight/  Shared Python library (PDF/text parsing, prompts, Word/PPT templates)
+deploy/     Nginx config + systemd unit for Ubuntu EC2
 ```
 
-To install this Python package in a virtual environment, you can use either pip or Anaconda.
+The AI layer targets an **OpenAI-compatible endpoint** (moved off the Azure
+deployments). The new endpoint requires an explicit **base URL**.
 
-#### Using pip
+### Configuration
 
-1. Create a virtual environment:
-    ```bash
-    python -m venv highlight_env
-    ```
+Create a `.env` in the repository root (and copy it to `backend/.env` for
+deployment):
 
-2. Activate the virtual environment:
-    - On Windows:
-        ```bash
-        highlight_env\Scripts\activate
-        ```
-    - On macOS and Linux:
-        ```bash
-        source highlight_env/bin/activate
-        ```
+```dotenv
+OPENAI_API_KEY="sk-..."
+OPENAI_MODEL="gpt-5.5-project"
+OPENAI_EMBEDDING_MODEL="text-embedding-3-large-project"
+OPENAI_BASE_URL="https://ai-incubator-api.pnnl.gov"
+IM3_ACCESS="phase3"
+```
 
-3. Install the package from the cloned `highlight` directory:
-    ```bash
-    pip install .
-    ```
+Users sign in with the `IM3_ACCESS` password, or by supplying their own
+OpenAI-compatible API key and base URL in the sign-in screen.
 
-#### Using Anaconda
+### Local development
 
-1. Create a virtual environment:
-    ```bash
-    conda create --name highlight_env python=3.9
-    ```
+**Backend** (from the repository root):
 
-2. Activate the virtual environment:
-    ```bash
-    conda activate highlight_env
-    ```
+```bash
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install .
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
 
-3. Install the package from the cloned `highlight` directory:
-    ```bash
-    pip install .
-    ```
+**Frontend** (in a second terminal):
 
-### Running the App
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-To run the app using Streamlit, follow these steps:
+The Vite dev server runs on `http://localhost:5173` and proxies `/api` to the
+backend on port 8000.
 
-1. Ensure your virtual environment is activated.
+### Production (Ubuntu EC2)
 
-2. Run the Streamlit app from the `highlight` directory:
-    ```bash
-    streamlit run app.py
-    ```
+The app is served in production by **Nginx** (static SPA + `/api` reverse proxy)
+with the backend managed by **systemd**. Full instructions are in
+[`deploy/README-deploy.md`](deploy/README-deploy.md).
+
+### Tests
+
+```bash
+pip install ".[test]"
+pytest
+```

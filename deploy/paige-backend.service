@@ -1,0 +1,34 @@
+# systemd unit for the PAIGE FastAPI backend (uvicorn) on Ubuntu EC2.
+#
+# Install:
+#   sudo cp deploy/paige-backend.service /etc/systemd/system/paige-backend.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now paige-backend
+#
+# Adjust User, WorkingDirectory, and paths to match your deployment.
+
+[Unit]
+Description=PAIGE FastAPI backend (uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+# Repository checkout location on the instance.
+WorkingDirectory=/opt/highlight/backend
+
+# Load the OpenAI-compatible credentials (OPENAI_API_KEY, OPENAI_MODEL,
+# OPENAI_BASE_URL, IM3_ACCESS, ...). This file is the repo .env copied to the
+# backend directory (never commit real credentials).
+EnvironmentFile=/opt/highlight/backend/.env
+
+# Use the project virtualenv created during deploy (see README-deploy.md).
+ExecStart=/opt/highlight/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

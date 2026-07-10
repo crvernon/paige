@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Default background is white across the whole app. */
+html,
+body,
+#root {
+  background-color: #ffffff;
+  color: #111827;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-md bg-im3 px-4 py-2
+      text-sm font-semibold text-white transition-colors hover:bg-im3-dark
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-md border
+      border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700
+      transition-colors hover:bg-gray-50 disabled:opacity-50;
+  }
+
+  .input {
+    @apply w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm
+      shadow-sm focus:border-im3 focus:outline-none focus:ring-1 focus:ring-im3;
+  }
+
+  .textarea {
+    @apply w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm
+      shadow-sm focus:border-im3 focus:outline-none focus:ring-1 focus:ring-im3;
+  }
+
+  .card {
+    @apply rounded-lg border border-gray-200 bg-white p-5 shadow-sm;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-gray-900;
+  }
+}
