@@ -10,12 +10,26 @@ The instructions below assume the repository is checked out to `/opt/highlight`.
 
 ## 1. System packages
 
+The frontend build toolchain (Vite 5 / TypeScript 5.9) **requires Node.js 18 or
+newer** (20 LTS recommended). Ubuntu's default repositories ship an old Node
+(e.g. v12), which will fail the build with `SyntaxError: Unexpected token '?'`.
+Remove any distro-provided Node first, then install Node 20 from NodeSource:
+
 ```bash
 sudo apt update
 sudo apt install -y python3-venv python3-pip nginx
+
+# Remove any old Ubuntu-repo Node that would shadow the NodeSource install
+sudo apt remove -y nodejs npm libnode72 || true
+sudo apt autoremove -y
+
 # Node.js 20 LTS
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
+
+# Verify — must report v20.x (>= 18) and npm >= 8
+node -v
+npm -v
 ```
 
 ## 2. Backend
@@ -55,14 +69,34 @@ The API is now available on `127.0.0.1:8000` (health check: `GET /api/health`).
 
 ## 3. Frontend
 
+Confirm Node 18+ is active first (see step 1); building under Node 12 fails with
+`SyntaxError: Unexpected token '?'`.
+
 ```bash
 cd /opt/highlight/frontend
+node -v                # must be >= 18
 npm install
 npm run build          # outputs to frontend/dist
 
 sudo mkdir -p /var/www/paige
 sudo cp -r dist/* /var/www/paige/
 ```
+
+> **Troubleshooting — `SyntaxError: Unexpected token '?'` during `npm run build`:**
+> This means an old Node.js (e.g. v12) is being used. Remove the distro Node,
+> install Node 20 (step 1), then rebuild from a clean tree:
+>
+> ```bash
+> sudo apt remove -y nodejs npm libnode72 || true
+> sudo apt autoremove -y
+> curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+> sudo apt install -y nodejs
+> node -v    # verify >= 18
+> cd /opt/highlight/frontend
+> rm -rf node_modules package-lock.json
+> npm install
+> npm run build
+> ```
 
 ## 4. Nginx
 
